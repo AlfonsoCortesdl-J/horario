@@ -1,24 +1,25 @@
 'use server';
 
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentUserId } from '@/lib/session';
 import { AvailabilitySlot } from '@/types/database';
 import { revalidatePath } from 'next/cache';
 
 export async function saveUserAvailabilitySlots(
   slots: { day_of_week: number; start_time: string; end_time: string; is_recurring: boolean }[]
 ) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     throw new Error('No autorizado');
   }
+
+  const supabase = createAdminClient();
 
   // 1. Borrar slots recurrentes previos del usuario
   const { error: deleteError } = await supabase
     .from('availability_slots')
     .delete()
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('is_recurring', true);
 
   if (deleteError) {
@@ -28,7 +29,7 @@ export async function saveUserAvailabilitySlots(
   // 2. Insertar nuevos slots si hay alguno
   if (slots.length > 0) {
     const slotsToInsert = slots.map((s) => ({
-      user_id: user.id,
+      user_id: userId,
       day_of_week: s.day_of_week,
       start_time: s.start_time,
       end_time: s.end_time,
@@ -49,7 +50,7 @@ export async function saveUserAvailabilitySlots(
 }
 
 export async function getTeamAvailability() {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createAdminClient();
 
   const [slotsRes, profilesRes] = await Promise.all([
     supabase.from('availability_slots').select('*'),

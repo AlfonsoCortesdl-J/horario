@@ -1,15 +1,14 @@
 'use server';
 
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentUserId } from '@/lib/session';
 import { PresenceWindow, Profile } from '@/types/database';
 import { calculateCoverageSlots, analyzePresenceChangeImpact } from '@/lib/coverage/calculator';
 import { revalidatePath } from 'next/cache';
 
 export async function getPresenceWindowsAndCoverage(dateIso: string) {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createAdminClient();
 
-  // Rango del día completo en UTC
   const targetDate = new Date(dateIso);
   const startOfDay = new Date(targetDate);
   startOfDay.setHours(0, 0, 0, 0);
@@ -17,7 +16,6 @@ export async function getPresenceWindowsAndCoverage(dateIso: string) {
   const endOfDay = new Date(targetDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  // Obtener ventanas del día con el perfil del usuario incluido
   const { data: windowsData, error: windowsError } = await supabase
     .from('presence_windows')
     .select('*, profiles(*)')
@@ -32,7 +30,6 @@ export async function getPresenceWindowsAndCoverage(dateIso: string) {
 
   const windows = (windowsData || []) as (PresenceWindow & { profiles?: Profile })[];
 
-  // Rango para bloques de 30 min (07:00 a 23:00)
   const rangeStart = new Date(targetDate);
   rangeStart.setHours(7, 0, 0, 0);
 
@@ -54,10 +51,10 @@ export async function createPresenceWindow(payload: {
   need_ride_to?: boolean;
   need_ride_from?: boolean;
 }) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
 
-  if (authError || !user) throw new Error('No autorizado');
+  const supabase = createAdminClient();
 
   // Obtener ventanas existentes para evaluar traslape
   const { data: existingWindows } = await supabase
@@ -70,20 +67,19 @@ export async function createPresenceWindow(payload: {
   const impact = analyzePresenceChangeImpact(
     (existingWindows || []) as (PresenceWindow & { profiles?: Profile })[],
     {
-      user_id: user.id,
+      user_id: userId,
       start_time: payload.start_time,
       end_time: payload.end_time,
     },
     'CREATE'
   );
 
-  // Si tiene tramos solos, queda como 'pending_partner', si no 'confirmed'
   const status = impact.hasSoloViolation ? 'pending_partner' : 'confirmed';
 
   const { data: newWindow, error: insertError } = await supabase
     .from('presence_windows')
     .insert({
-      user_id: user.id,
+      user_id: userId,
       start_time: payload.start_time,
       end_time: payload.end_time,
       note: payload.note || null,
@@ -96,10 +92,9 @@ export async function createPresenceWindow(payload: {
 
   if (insertError) throw new Error(`Error al registrar ventana: ${insertError.message}`);
 
-  // Si solicitó transporte, crear solicitudes de viaje correspondientes
   if (payload.need_ride_to) {
     await supabase.from('ride_requests').insert({
-      user_id: user.id,
+      user_id: userId,
       presence_window_id: newWindow.id,
       direction: 'to_venue',
       target_time: payload.start_time,
@@ -109,7 +104,7 @@ export async function createPresenceWindow(payload: {
 
   if (payload.need_ride_from) {
     await supabase.from('ride_requests').insert({
-      user_id: user.id,
+      user_id: userId,
       presence_window_id: newWindow.id,
       direction: 'from_venue',
       target_time: payload.end_time,
@@ -130,12 +125,11 @@ export async function cancelPresenceWindow(payload: {
   windowId: string;
   reason: string;
 }) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
 
-  if (authError || !user) throw new Error('No autorizado');
+  const supabase = createAdminClient();
 
-  // Obtener ventana a cancelar
   const { data: windowToCancel, error: fetchError } = await supabase
     .from('presence_windows')
     .select('*, profiles(*)')
@@ -144,7 +138,6 @@ export async function cancelPresenceWindow(payload: {
 
   if (fetchError || !windowToCancel) throw new Error('Ventana no encontrada');
 
-  // Obtener ventanas de otros miembros para calcular si alguien queda solo
   const { data: activeWindows } = await supabase
     .from('presence_windows')
     .select('*, profiles(*)')
@@ -163,7 +156,6 @@ export async function cancelPresenceWindow(payload: {
     'CANCEL'
   );
 
-  // Marcar como cancelada
   const { error: cancelError } = await supabase
     .from('presence_windows')
     .update({
@@ -175,10 +167,8 @@ export async function cancelPresenceWindow(payload: {
 
   if (cancelError) throw new Error(`Error al cancelar: ${cancelError.message}`);
 
-  // Si dejó a alguien solo, registrar alerta de cobertura
   if (impact.hasSoloViolation) {
-    const adminClient = createAdminClient();
-    await adminClient.from('coverage_alerts').insert({
+    await supabase.from('coverage_alerts').insert({
       presence_window_id: payload.windowId,
       alert_type: 'cancellation_risk',
       window_start: windowToCancel.start_time,
@@ -197,16 +187,16 @@ export async function cancelPresenceWindow(payload: {
 }
 
 export async function checkInPresence(windowId: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
 
-  if (authError || !user) throw new Error('No autorizado');
+  const supabase = createAdminClient();
 
   const { error } = await supabase
     .from('presence_windows')
     .update({ checked_in_at: new Date().toISOString() })
     .eq('id', windowId)
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
 
   if (error) throw new Error(`Error en check-in: ${error.message}`);
   revalidatePath('/');
@@ -214,12 +204,11 @@ export async function checkInPresence(windowId: string) {
 }
 
 export async function checkOutPresence(windowId: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
 
-  if (authError || !user) throw new Error('No autorizado');
+  const supabase = createAdminClient();
 
-  // Verificar si hay otros usuarios actualmente checked-in en el lugar
   const { data: currentlyPresent } = await supabase
     .from('presence_windows')
     .select('user_id, profiles(full_name)')
@@ -227,20 +216,20 @@ export async function checkOutPresence(windowId: string) {
     .not('checked_in_at', 'is', null)
     .is('checked_out_at', null);
 
-  const otherPresent = (currentlyPresent || []).filter((p) => p.user_id !== user.id);
+  const otherPresent = (currentlyPresent || []).filter((p) => p.user_id !== userId);
   const leavesSomeoneAlone = otherPresent.length === 1;
 
   const { error } = await supabase
     .from('presence_windows')
     .update({ checked_out_at: new Date().toISOString() })
     .eq('id', windowId)
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
 
   if (error) throw new Error(`Error en check-out: ${error.message}`);
 
   revalidatePath('/');
   return { 
-    success: true,
+    success: true, 
     leavesSomeoneAlone,
     remainingUserName: leavesSomeoneAlone ? (otherPresent[0] as any).profiles?.full_name : null,
   };

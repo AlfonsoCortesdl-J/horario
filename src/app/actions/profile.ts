@@ -1,17 +1,17 @@
 'use server';
 
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentUserId } from '@/lib/session';
 import { Profile } from '@/types/database';
 import { revalidatePath } from 'next/cache';
 
 export async function updateUserProfile(updates: Partial<Profile>) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     throw new Error('No autorizado');
   }
+
+  const supabase = createAdminClient();
 
   // Prevenir que el usuario se asigne a sí mismo rol de admin directamente desde el cliente
   const safeUpdates = { ...updates };
@@ -21,7 +21,7 @@ export async function updateUserProfile(updates: Partial<Profile>) {
   const { error } = await supabase
     .from('profiles')
     .update(safeUpdates)
-    .eq('id', user.id);
+    .eq('id', userId);
 
   if (error) {
     throw new Error(`Error al actualizar perfil: ${error.message}`);
@@ -31,50 +31,46 @@ export async function updateUserProfile(updates: Partial<Profile>) {
   return { success: true };
 }
 
-export async function inviteTeamMember(email: string, fullName: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+export async function inviteTeamMember(fullName: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
     throw new Error('No autorizado');
   }
 
-  // Verificar que quien invita sea admin
+  const supabase = createAdminClient();
+
+  // Verificar rol de admin
   const { data: currentProfile } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single();
 
   if (currentProfile?.role !== 'admin') {
-    throw new Error('Solo el administrador puede invitar miembros');
+    throw new Error('Solo el administrador puede pre-registrar miembros');
   }
 
-  const adminClient = createAdminClient();
+  const name = fullName.trim();
+  if (!name) throw new Error('Nombre inválido');
 
-  // Enviar invitación oficial por correo vía Supabase Auth
-  const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    data: {
-      full_name: fullName,
-    },
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/confirm`,
-  });
-
-  if (inviteError) {
-    return { success: false, message: inviteError.message };
-  }
-
-  // Asegurar que el perfil se cree con el nombre indicado
-  if (inviteData?.user) {
-    await adminClient.from('profiles').upsert({
-      id: inviteData.user.id,
-      email: email,
-      full_name: fullName,
+  // Insertar nuevo miembro en el sistema de confianza
+  const { data: created, error } = await supabase
+    .from('profiles')
+    .insert({
+      id: crypto.randomUUID(),
+      full_name: name,
       role: 'member',
       is_active: true,
-    });
+      has_car: false,
+      available_seats: 0,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    return { success: false, message: error.message };
   }
 
   revalidatePath('/');
-  return { success: true, message: `Invitación enviada con éxito a ${email}` };
+  return { success: true, message: `¡Miembro ${name} registrado con éxito!` };
 }

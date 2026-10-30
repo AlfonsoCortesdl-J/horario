@@ -1,16 +1,16 @@
 'use server';
 
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getCurrentUserId } from '@/lib/session';
 import { RideRequest, RideAssignment, Profile, PresenceWindow } from '@/types/database';
 import { matchRides, DriverCandidate } from '@/lib/rides/matcher';
 import { revalidatePath } from 'next/cache';
 
 export async function getRidesData(dateIso: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
 
-  if (authError || !user) throw new Error('No autorizado');
+  const supabase = createAdminClient();
 
   const targetDate = new Date(dateIso);
   const startOfDay = new Date(targetDate);
@@ -23,7 +23,7 @@ export async function getRidesData(dateIso: string) {
   const { data: myPassengerRequests } = await supabase
     .from('ride_requests')
     .select('*, ride_assignments(*, driver:profiles!driver_id(*))')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .gte('target_time', startOfDay.toISOString())
     .lte('target_time', endOfDay.toISOString())
     .order('target_time', { ascending: true });
@@ -32,7 +32,7 @@ export async function getRidesData(dateIso: string) {
   const { data: myDriverAssignments } = await supabase
     .from('ride_assignments')
     .select('*, ride_requests(*, profiles(*))')
-    .eq('driver_id', user.id)
+    .eq('driver_id', userId)
     .gte('scheduled_pickup_time', startOfDay.toISOString())
     .lte('scheduled_pickup_time', endOfDay.toISOString())
     .order('scheduled_pickup_time', { ascending: true });
@@ -63,8 +63,7 @@ export async function getRidesData(dateIso: string) {
 }
 
 export async function executeAutomaticRideMatching(dateIso: string) {
-  const supabase = await createServerSupabaseClient();
-  const adminClient = createAdminClient();
+  const supabase = createAdminClient();
 
   const targetDate = new Date(dateIso);
   const startOfDay = new Date(targetDate);
@@ -126,7 +125,7 @@ export async function executeAutomaticRideMatching(dateIso: string) {
 
   // Registrar asignaciones en base de datos
   for (const asg of matchResult.assigned) {
-    await adminClient.from('ride_assignments').insert({
+    await supabase.from('ride_assignments').insert({
       request_id: asg.requestId,
       driver_id: asg.driverId,
       scheduled_pickup_time: asg.scheduledPickupTime,
@@ -134,7 +133,7 @@ export async function executeAutomaticRideMatching(dateIso: string) {
       status: 'pending_driver_acceptance',
     });
 
-    await adminClient
+    await supabase
       .from('ride_requests')
       .update({ status: 'assigned' })
       .eq('id', asg.requestId);
@@ -143,7 +142,7 @@ export async function executeAutomaticRideMatching(dateIso: string) {
   // Notificar al admin si quedaron pasajeros sin asignar
   if (matchResult.unassigned.length > 0) {
     const unassignedNames = matchResult.unassigned.map((u) => u.passengerName).join(', ');
-    await adminClient.from('notifications').insert({
+    await supabase.from('notifications').insert({
       user_id: (await supabase.from('profiles').select('id').eq('role', 'admin').limit(1).single()).data?.id || unassignedRequests[0].user_id,
       channel: 'in_app',
       title: 'Pasajeros sin transporte asignado',
@@ -164,11 +163,10 @@ export async function respondToRideAssignment(payload: {
   accepted: boolean;
   rejectionReason?: string;
 }) {
-  const supabase = await createServerSupabaseClient();
-  const adminClient = createAdminClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
 
-  if (authError || !user) throw new Error('No autorizado');
+  const supabase = createAdminClient();
 
   const { data: assignment, error: fetchErr } = await supabase
     .from('ride_assignments')
@@ -178,12 +176,11 @@ export async function respondToRideAssignment(payload: {
 
   if (fetchErr || !assignment) throw new Error('Asignación no encontrada');
 
-  if (assignment.driver_id !== user.id) {
+  if (assignment.driver_id !== userId) {
     throw new Error('Solo el conductor asignado puede responder a este viaje');
   }
 
   if (payload.accepted) {
-    // 1. ACEPTAR VIAJE
     await supabase
       .from('ride_assignments')
       .update({
@@ -192,18 +189,16 @@ export async function respondToRideAssignment(payload: {
       })
       .eq('id', payload.assignmentId);
 
-    // Notificar al pasajero que su viaje fue confirmado
-    await adminClient.from('notifications').insert({
+    await supabase.from('notifications').insert({
       user_id: assignment.ride_requests.user_id,
       channel: 'in_app',
       title: '¡Conductor confirmado!',
-      message: `Tu conductor ha confirmado el viaje para las ${new Date(assignment.scheduledPickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} en ${assignment.pickup_location}.`,
+      message: `Tu conductor ha confirmado el viaje para las ${new Date(assignment.scheduled_pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} en ${assignment.pickup_location}.`,
     });
 
     revalidatePath('/');
     return { success: true, message: 'Viaje aceptado con éxito' };
   } else {
-    // 2. RECHAZAR VIAJE: Reasignación automática
     await supabase
       .from('ride_assignments')
       .update({
@@ -213,13 +208,11 @@ export async function respondToRideAssignment(payload: {
       })
       .eq('id', payload.assignmentId);
 
-    // Devolver la solicitud a estado 'unassigned' para que el matcher busque otro conductor
-    await adminClient
+    await supabase
       .from('ride_requests')
       .update({ status: 'unassigned' })
       .eq('id', assignment.request_id);
 
-    // Disparar reasignación automática inmediata
     await executeAutomaticRideMatching(assignment.scheduled_pickup_time);
 
     revalidatePath('/');

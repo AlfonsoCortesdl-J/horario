@@ -12,7 +12,7 @@ import {
   LogOut,
   Clock
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { logoutMember } from '@/app/actions/auth';
 import { useRouter } from 'next/navigation';
 
 interface NavbarProps {
@@ -23,10 +23,9 @@ interface NavbarProps {
 
 export default function Navbar({ profile, activeTab, setActiveTab }: NavbarProps) {
   const router = useRouter();
-  const supabase = createClient();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logoutMember();
     router.push('/login');
     router.refresh();
   };

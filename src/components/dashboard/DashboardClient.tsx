@@ -77,8 +77,8 @@ export default function DashboardClient({
     setProfile((prev) => ({ ...prev, ...updates }));
   };
 
-  const handleInviteUser = async (email: string, fullName: string) => {
-    return await inviteTeamMember(email, fullName);
+  const handleInviteUser = async (fullName: string) => {
+    return await inviteTeamMember(fullName);
   };
 
   // Manejador de Crear Ventana de Presencia

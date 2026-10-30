@@ -21,7 +21,7 @@ import {
 interface ProfileSettingsProps {
   profile: Profile;
   onUpdateProfile: (updatedData: Partial<Profile>) => Promise<void>;
-  onInviteUser?: (email: string, fullName: string) => Promise<{ success: boolean; message: string }>;
+  onInviteUser?: (fullName: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export default function ProfileSettings({
@@ -76,21 +76,20 @@ export default function ProfileSettings({
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onInviteUser || !inviteEmail.trim()) return;
+    if (!onInviteUser || !inviteName.trim()) return;
 
     setInviting(true);
     setInviteMsg(null);
     try {
-      const res = await onInviteUser(inviteEmail.trim(), inviteName.trim());
+      const res = await onInviteUser(inviteName.trim());
       if (res.success) {
-        setInviteMsg({ type: 'success', text: `¡Invitación enviada a ${inviteEmail}!` });
-        setInviteEmail('');
+        setInviteMsg({ type: 'success', text: `¡Miembro ${inviteName} pre-registrado con éxito!` });
         setInviteName('');
       } else {
         setInviteMsg({ type: 'error', text: res.message });
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al enviar invitación';
+      const msg = err instanceof Error ? err.message : 'Error al registrar miembro';
       setInviteMsg({ type: 'error', text: msg });
     } finally {
       setInviting(false);
@@ -331,38 +330,22 @@ export default function ProfileSettings({
             </h2>
           </div>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            Invita a las otras 9 personas del equipo. Recibirán un correo con su enlace mágico directo para ingresar a la app.
+            Puedes pre-registrar a los compañeros del equipo para que aparezcan en la lista de selección al abrir la app.
           </p>
 
           <form onSubmit={handleInviteSubmit} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  Nombre de la persona
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej. Sofía Martínez"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  Correo electrónico
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="sofia@ejemplo.com"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                Nombre de la persona
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ej. Sofía Martínez"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
+              />
             </div>
 
             {inviteMsg && (
@@ -381,7 +364,7 @@ export default function ProfileSettings({
               disabled={inviting}
               className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-all shadow-md shadow-amber-600/20 disabled:opacity-50"
             >
-              {inviting ? 'Enviando invitación...' : 'Enviar Invitación'}
+              {inviting ? 'Guardando...' : 'Pre-registrar Miembro'}
             </button>
           </form>
         </div>

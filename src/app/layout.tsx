@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   title: 'Coordinación de Presencia | Regla de 2',
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="es">
       <body className="antialiased bg-[#09090b] text-zinc-100 min-h-screen selection:bg-zinc-800 selection:text-white">
         {children}
+        <Analytics />
         <script
           dangerouslySetInnerHTML={{
             __html: `

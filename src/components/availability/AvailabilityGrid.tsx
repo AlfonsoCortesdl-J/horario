@@ -417,20 +417,23 @@ export default function AvailabilityGrid({
         </div>
       </div>
 
-      {/* Explicación rápida */}
-      <div className="px-4 py-2 bg-zinc-950 border-b border-zinc-800/60 text-[11px] text-zinc-400 flex items-center justify-between">
-        <span>
-          {viewMode === 'mine'
-            ? 'Arrastra o toca sobre los cuadros verdes para indicar tus horas disponibles.'
-            : 'Pasa el cursor o toca cualquier cuadro para ver quiénes pueden asistir en ese horario.'}
-        </span>
+      {/* Explicación rápida y ciclo semanal */}
+      <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800/60 text-[11px] text-zinc-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+          <span>
+            {viewMode === 'mine'
+              ? 'Pinta los horarios donde puedes asistir. Se reinicia automáticamente cada sábado a medianoche para capturar la nueva semana el domingo.'
+              : 'Pasa el cursor o toca cualquier bloque para ver quiénes pueden asistir en ese horario.'}
+          </span>
+        </div>
         {viewMode === 'team' && (
-          <div className="flex items-center gap-2 text-[10px]">
+          <div className="flex items-center gap-2 text-[10px] self-end sm:self-auto flex-shrink-0">
             <span className="text-zinc-500">0</span>
             <span className="w-3 h-3 rounded bg-zinc-900 border border-zinc-800" />
-            <span className="text-rose-400">1 (Alerta)</span>
+            <span className="text-rose-400 font-semibold">1 (Alerta)</span>
             <span className="w-3 h-3 rounded bg-rose-950 border border-rose-800" />
-            <span className="text-emerald-400">2+ (Cubierto)</span>
+            <span className="text-emerald-400 font-semibold">2+ (Cubierto)</span>
             <span className="w-3 h-3 rounded bg-emerald-500" />
           </div>
         )}

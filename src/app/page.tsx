@@ -5,6 +5,7 @@ import DashboardClient from '@/components/dashboard/DashboardClient';
 import { Profile, AvailabilitySlot } from '@/types/database';
 import { getPresenceWindowsAndCoverage } from '@/app/actions/presence';
 import { getRidesData } from '@/app/actions/rides';
+import { getLastSaturdayResetUtc } from '@/app/actions/availability';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,11 +31,19 @@ export default async function HomePage() {
   }
 
   const todayIso = new Date().toISOString();
+  const lastResetUtc = await getLastSaturdayResetUtc();
 
-  // Cargar disponibilidad, perfiles, ventanas de presencia y datos de carpooling
+  // Cargar disponibilidad de la semana activa, perfiles, presencia y carpooling
   const [userSlotsRes, allSlotsRes, profilesRes, presenceData, ridesData] = await Promise.all([
-    supabase.from('availability_slots').select('*').eq('user_id', profile.id),
-    supabase.from('availability_slots').select('*'),
+    supabase
+      .from('availability_slots')
+      .select('*')
+      .eq('user_id', profile.id)
+      .gte('created_at', lastResetUtc),
+    supabase
+      .from('availability_slots')
+      .select('*')
+      .gte('created_at', lastResetUtc),
     supabase.from('profiles').select('*').eq('is_active', true),
     getPresenceWindowsAndCoverage(todayIso),
     getRidesData(todayIso),

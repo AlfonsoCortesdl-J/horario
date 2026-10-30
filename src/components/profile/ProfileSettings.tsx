@@ -17,9 +17,11 @@ import {
   EyeOff,
   Edit2,
   Check,
-  Shield
+  Shield,
+  RotateCcw
 } from 'lucide-react';
 import { getAdminMembersList, adminUpdateMemberPassword } from '@/app/actions/auth';
+import { resetAllAvailabilityNow } from '@/app/actions/availability';
 
 interface ProfileSettingsProps {
   profile: Profile;
@@ -344,6 +346,36 @@ export default function ProfileSettings({
               })}
             </div>
           )}
+
+          {/* Botón de reinicio manual para la semana */}
+          <div className="pt-3 border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold text-zinc-300">
+                Reinicio manual de horarios
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                El sistema se reinicia automáticamente los sábados por la noche. Usa este botón si necesitas vaciar la semana ahora mismo.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                if (window.confirm('¿Deseas vaciar todos los horarios de la semana activa para que el equipo vuelva a llenar su disponibilidad?')) {
+                  try {
+                    await resetAllAvailabilityNow();
+                    alert('Horarios de la semana reiniciados con éxito.');
+                  } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : 'Error al reiniciar';
+                    alert(msg);
+                  }
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl border border-rose-800/60 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-medium flex items-center gap-1.5 transition-colors self-start sm:self-auto flex-shrink-0"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Vaciar semana actual</span>
+            </button>
+          </div>
         </div>
       )}
 

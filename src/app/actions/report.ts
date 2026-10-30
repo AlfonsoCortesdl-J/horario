@@ -8,11 +8,12 @@ export interface MemberReportRow {
   id: string;
   full_name: string;
   role: string;
-  totalSlots: number;       // cantidad de bloques marcados
-  totalHours: number;       // horas totales de disponibilidad
-  days: string[];           // días con disponibilidad (e.g. ["Lun", "Mié", "Vie"])
-  earliestStart: string;    // hora más temprana marcada (e.g. "08:00")
-  latestEnd: string;        // hora más tardía marcada (e.g. "20:00")
+  avatar_url: string | null;
+  totalSlots: number;
+  totalHours: number;
+  days: string[];
+  earliestStart: string;
+  latestEnd: string;
 }
 
 export interface WeeklyReportData {
@@ -56,7 +57,7 @@ export async function generateWeeklyReport(): Promise<WeeklyReportData> {
       .gte('created_at', lastResetUtc),
     supabase
       .from('profiles')
-      .select('id, full_name, role')
+      .select('id, full_name, role, avatar_url')
       .eq('is_active', true),
   ]);
 
@@ -119,6 +120,7 @@ export async function generateWeeklyReport(): Promise<WeeklyReportData> {
       id: p.id,
       full_name: p.full_name,
       role: p.role,
+      avatar_url: (p as { avatar_url?: string | null }).avatar_url ?? null,
       totalSlots: userSlots.length,
       totalHours: Math.round((totalMinutes / 60) * 10) / 10,
       days: [...daysSet],

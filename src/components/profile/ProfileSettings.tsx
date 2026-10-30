@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Profile } from '@/types/database';
 import { 
   User, 
@@ -18,10 +18,14 @@ import {
   Edit2,
   Check,
   Shield,
-  RotateCcw
+  RotateCcw,
+  Camera,
+  X,
+  Loader2
 } from 'lucide-react';
 import { getAdminMembersList, adminUpdateMemberPassword } from '@/app/actions/auth';
 import { resetAllAvailabilityNow } from '@/app/actions/availability';
+import { uploadAvatar, deleteAvatar } from '@/app/actions/avatar';
 
 interface ProfileSettingsProps {
   profile: Profile;
@@ -47,6 +51,43 @@ export default function ProfileSettings({
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Avatar / foto de perfil
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url || null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    setAvatarError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { url } = await uploadAvatar(fd);
+      setAvatarUrl(url);
+    } catch (err: unknown) {
+      setAvatarError(err instanceof Error ? err.message : 'Error al subir foto');
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+    if (!window.confirm('¿Quitar tu foto de perfil?')) return;
+    setUploadingAvatar(true);
+    try {
+      await deleteAvatar();
+      setAvatarUrl(null);
+    } catch (err: unknown) {
+      setAvatarError(err instanceof Error ? err.message : 'Error al eliminar foto');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Estados exclusivos de administración de contraseñas
   const [adminMembers, setAdminMembers] = useState<{ id: string; full_name: string; role: string; plain_password: string }[]>([]);
@@ -152,6 +193,63 @@ export default function ProfileSettings({
         </div>
 
         <div className="space-y-4">
+          {/* Foto de perfil */}
+          <div className="flex items-center gap-4">
+            <div className="relative flex-shrink-0">
+              {/* Círculo con foto o inicial */}
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarUrl} alt="Foto" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-2xl font-bold text-zinc-300">
+                    {profile.full_name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {/* Loader overlay */}
+              {uploadingAvatar && (
+                <div className="absolute inset-0 rounded-full bg-zinc-950/70 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+              <button
+                type="button"
+                disabled={uploadingAvatar}
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg border border-zinc-700 transition-colors disabled:opacity-50"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                {avatarUrl ? 'Cambiar foto' : 'Subir foto'}
+              </button>
+              {avatarUrl && (
+                <button
+                  type="button"
+                  disabled={uploadingAvatar}
+                  onClick={handleDeleteAvatar}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-transparent hover:bg-rose-950/40 text-zinc-500 hover:text-rose-300 rounded-lg border border-zinc-800 hover:border-rose-800/60 transition-colors disabled:opacity-50"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Quitar foto
+                </button>
+              )}
+              {avatarError && (
+                <p className="text-[11px] text-rose-400">{avatarError}</p>
+              )}
+              <p className="text-[10px] text-zinc-600">JPG, PNG o WebP · máx. 2 MB</p>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-zinc-300 mb-1">
               Nombre Completo

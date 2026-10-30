@@ -149,34 +149,122 @@ async function downloadAsPDF(report: WeeklyReportData) {
   }
   y += 36;
 
-  // ── Tabla de miembros ────────────────────────────────────────────────────────
+  // ── Tabla de miembros con fotos ─────────────────────────────────────────────
   doc.setTextColor(...C.white);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('Disponibilidad por integrante', margin, y + 5);
   y += 8;
 
-  // Cabecera tabla
-  const cols = [52, 20, 22, 24, 34, 34] as const;
-  const headers = ['Nombre', 'Horas', 'Bloques', 'Días', 'Desde', 'Hasta'];
+  // Cabecera tabla — primera col más estrecha para dejar espacio al avatar
+  const avatarColW = 14;
+  const cols = [avatarColW, 44, 20, 20, 22, 28, 28] as const;
+  const headers = ['', 'Nombre', 'Horas', 'Bloques', 'Días', 'Desde', 'Hasta'];
   let cx = margin;
   doc.setFillColor(...C.zinc700);
   doc.rect(margin, y, pageW - margin * 2, 7, 'F');
   headers.forEach((h, i) => {
-    doc.setTextColor(...C.zinc100);
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'bold');
-    doc.text(h, cx + 2, y + 5);
+    if (h) {
+      doc.setTextColor(...C.zinc100);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(h, cx + 2, y + 5);
+    }
     cx += cols[i];
   });
   y += 8;
 
-  // Filas
-  report.members.forEach((m, idx) => {
-    const rowH = 8;
+  // Helper: convierte URL de imagen a base64 via fetch + FileReader (funciona en browser)
+  const toBase64 = async (url: string): Promise<string | null> => {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper: dibuja un círculo de color con la inicial del nombre
+  const drawInitialAvatar = (name: string, ax: number, ay: number, r: number) => {
+    // Generar color determinista a partir del nombre
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    const colors: [number, number, number][] = [
+      [52, 211, 153],  // emerald
+      [251, 146, 60],  // orange
+      [147, 51, 234],  // purple
+      [59, 130, 246],  // blue
+      [236, 72, 153],  // pink
+      [234, 179, 8],   // yellow
+    ];
+    const color = colors[Math.abs(hash) % colors.length];
+    doc.setFillColor(...color);
+    doc.circle(ax, ay, r, 'F');
+    doc.setTextColor(...C.bg);
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'bold');
+    doc.text(name.charAt(0).toUpperCase(), ax, ay + 2, { align: 'center' });
+  };
+
+  // Helper: dibuja foto circular recortada usando canvas
+  const drawCircularPhoto = (base64: string, ax: number, ay: number, r: number): Promise<void> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const size = r * 2 * 10; // px del canvas (escalado para calidad)
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        // Clip circular
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, 0, 0, size, size);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        try {
+          // jsPDF addImage con clip circular no es directo; usamos el canvas ya recortado
+          doc.addImage(dataUrl, 'JPEG', ax - r, ay - r, r * 2, r * 2);
+        } catch { /* fallback silencioso */ }
+        resolve();
+      };
+      img.onerror = () => resolve();
+      img.src = base64;
+    });
+  };
+
+  const rowH = 11; // un poco más alto para que quepa el avatar
+  for (let idx = 0; idx < report.members.length; idx++) {
+    const m = report.members[idx];
+
     if (idx % 2 === 0) {
       doc.setFillColor(18, 18, 20);
       doc.rect(margin, y, pageW - margin * 2, rowH, 'F');
+    }
+
+    // Centro vertical de la fila
+    const midY = y + rowH / 2;
+    const avatarR = 3.5; // radio en mm
+    const avatarX = margin + avatarColW / 2;
+
+    // Intentar foto real; si no, dibujar inicial
+    if (m.avatar_url) {
+      const b64 = await toBase64(m.avatar_url);
+      if (b64) {
+        await drawCircularPhoto(b64, avatarX, midY, avatarR);
+      } else {
+        drawInitialAvatar(m.full_name, avatarX, midY, avatarR);
+      }
+    } else {
+      drawInitialAvatar(m.full_name, avatarX, midY, avatarR);
     }
 
     const isActive = m.totalSlots > 0;
@@ -184,7 +272,8 @@ async function downloadAsPDF(report: WeeklyReportData) {
     doc.setFontSize(7.5);
     doc.setFont('helvetica', isActive ? 'normal' : 'italic');
 
-    const row = [
+    const rowData = [
+      '',
       m.full_name + (m.role === 'admin' ? ' ★' : ''),
       isActive ? `${m.totalHours}h` : '—',
       isActive ? String(m.totalSlots) : '—',
@@ -194,19 +283,19 @@ async function downloadAsPDF(report: WeeklyReportData) {
     ];
 
     cx = margin;
-    row.forEach((val, i) => {
-      doc.text(val, cx + 2, y + 5.5);
+    rowData.forEach((val, i) => {
+      if (val) doc.text(val, cx + 2, midY + 2.5);
       cx += cols[i];
     });
 
-    // Punto de color por actividad
+    // Punto de actividad
     if (isActive) {
       doc.setFillColor(...C.emerald);
-      doc.circle(margin - 3, y + 4, 1, 'F');
+      doc.circle(pageW - margin - 2, midY, 1.2, 'F');
     }
 
     y += rowH;
-  });
+  }
 
   // ── Pie de página ────────────────────────────────────────────────────────────
   y += 6;
@@ -408,12 +497,16 @@ export default function ReportPanel() {
                     className={`px-4 py-3 flex items-center justify-between gap-3 ${active ? '' : 'opacity-40'}`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                          active ? 'bg-emerald-950 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
-                        }`}
-                      >
-                        {m.full_name.charAt(0).toUpperCase()}
+                      {/* Avatar: foto real o inicial con color */}
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300">
+                        {m.avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={m.avatar_url} alt={m.full_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className={active ? 'text-emerald-400' : 'text-zinc-500'}>
+                            {m.full_name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">

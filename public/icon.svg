@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="128" fill="#0284c7"/>
-  <circle cx="256" cy="256" r="160" fill="none" stroke="#ffffff" stroke-width="32"/>
-  <polyline points="256,160 256,256 320,256" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="512" height="512" rx="120" fill="#09090b"/>
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="none" stroke="#27272a" stroke-width="8"/>
+  <!-- Dos anillos entrelazados (Símbolo de la Regla de 2) -->
+  <g transform="translate(0, 0)">
+    <circle cx="206" cy="256" r="110" fill="none" stroke="#34d399" stroke-width="28" stroke-linecap="round"/>
+    <circle cx="306" cy="256" r="110" fill="none" stroke="#f4f4f5" stroke-width="28" stroke-linecap="round"/>
+    <!-- Detalle de entrelazado -->
+    <path d="M 230 156 A 110 110 0 0 1 282 176" fill="none" stroke="#34d399" stroke-width="28" stroke-linecap="round"/>
+  </g>
 </svg>

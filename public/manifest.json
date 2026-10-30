@@ -1,12 +1,14 @@
 {
+  "id": "/",
   "name": "Coordinación de Presencia",
   "short_name": "Presencia",
-  "description": "Coordinación de presencia asíncrona, regla de 2 y carpooling para equipos.",
+  "description": "Coordinación de presencia asíncrona, regla de 2 y carpooling para el equipo.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0284c7",
-  "orientation": "portrait-primary",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icon-192.png",

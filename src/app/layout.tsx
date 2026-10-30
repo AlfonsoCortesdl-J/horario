@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: 'Coordinación de Presencia | Regla de 2',
   description: 'Coordinación asíncrona de presencia y carpooling para el equipo',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -18,7 +22,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#0f172a',
+  themeColor: '#09090b',
 };
 
 export default function RootLayout({
@@ -30,6 +34,19 @@ export default function RootLayout({
     <html lang="es">
       <body className="antialiased bg-[#09090b] text-zinc-100 min-h-screen selection:bg-zinc-800 selection:text-white">
         {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                    console.log('SW registration note:', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test ./src/lib/coverage/__tests__/coverage.test.ts"
+    "test": "node --experimental-strip-types --test ./src/lib/coverage/__tests__/coverage.test.ts ./src/lib/rides/__tests__/matcher.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

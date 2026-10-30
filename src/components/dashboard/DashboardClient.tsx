@@ -5,6 +5,7 @@ import { Profile, AvailabilitySlot, PresenceWindow, CoverageSlot } from '@/types
 import Navbar from '@/components/navigation/Navbar';
 import AvailabilityGrid from '@/components/availability/AvailabilityGrid';
 import PresenceCalendar from '@/components/presence/PresenceCalendar';
+import RidesHub from '@/components/rides/RidesHub';
 import ProfileSettings from '@/components/profile/ProfileSettings';
 import { saveUserAvailabilitySlots } from '@/app/actions/availability';
 import { updateUserProfile, inviteTeamMember } from '@/app/actions/profile';
@@ -15,7 +16,7 @@ import {
   checkOutPresence,
   getPresenceWindowsAndCoverage
 } from '@/app/actions/presence';
-import { Car, ArrowRight } from 'lucide-react';
+import { executeAutomaticRideMatching, respondToRideAssignment } from '@/app/actions/rides';
 
 interface DashboardClientProps {
   initialProfile: Profile;
@@ -24,6 +25,12 @@ interface DashboardClientProps {
   initialProfiles: Profile[];
   initialWindows: (PresenceWindow & { profiles?: Profile })[];
   initialCoverageSlots: CoverageSlot[];
+  initialRidesData: {
+    myPassengerRequests: any[];
+    myDriverAssignments: any[];
+    availableDriversCount: number;
+    allDayRequests: any[];
+  };
 }
 
 export default function DashboardClient({
@@ -33,6 +40,7 @@ export default function DashboardClient({
   initialProfiles,
   initialWindows,
   initialCoverageSlots,
+  initialRidesData,
 }: DashboardClientProps) {
   const [activeTab, setActiveTab] = useState<'availability' | 'presence' | 'rides' | 'profile'>('presence');
   const [profile, setProfile] = useState<Profile>(initialProfile);
@@ -41,6 +49,7 @@ export default function DashboardClient({
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
   const [windows, setWindows] = useState<(PresenceWindow & { profiles?: Profile })[]>(initialWindows);
   const [coverageSlots, setCoverageSlots] = useState<CoverageSlot[]>(initialCoverageSlots);
+  const [ridesData, setRidesData] = useState(initialRidesData);
 
   // Manejador de Disponibilidad
   const handleSaveSlots = async (
@@ -80,8 +89,7 @@ export default function DashboardClient({
     need_ride_to?: boolean;
     need_ride_from?: boolean;
   }) => {
-    const res = await createPresenceWindow(data);
-    // Recargar ventanas y cobertura actualizadas
+    await createPresenceWindow(data);
     const refreshed = await getPresenceWindowsAndCoverage(data.start_time);
     setWindows(refreshed.windows);
     setCoverageSlots(refreshed.coverageSlots);
@@ -90,7 +98,6 @@ export default function DashboardClient({
   // Manejador de Cancelar Ventana
   const handleCancelWindow = async (windowId: string, reason: string) => {
     await cancelPresenceWindow({ windowId, reason });
-    // Recargar ventanas y cobertura
     const targetDate = windows.find((w) => w.id === windowId)?.start_time || new Date().toISOString();
     const refreshed = await getPresenceWindowsAndCoverage(targetDate);
     setWindows(refreshed.windows);
@@ -104,6 +111,15 @@ export default function DashboardClient({
 
   const handleCheckOut = async (windowId: string) => {
     return await checkOutPresence(windowId);
+  };
+
+  // Manejador de Transporte
+  const handleRunMatching = async (dateStr: string) => {
+    return await executeAutomaticRideMatching(dateStr);
+  };
+
+  const handleRespondAssignment = async (assignmentId: string, accepted: boolean, reason?: string) => {
+    return await respondToRideAssignment({ assignmentId, accepted, rejectionReason: reason });
   };
 
   return (
@@ -138,29 +154,15 @@ export default function DashboardClient({
           </div>
         )}
 
-        {/* Pestaña: Transporte (Vista previa para Fase 3) */}
+        {/* Pestaña: Transporte y Carpooling Automático (Módulo 3) */}
         {activeTab === 'rides' && (
-          <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4">
-            <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto">
-              <Car className="w-6 h-6" />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              Coordinación Automática de Transporte
-            </h2>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">
-              Emparejamiento inteligente de conductores y pasajeros por cercanía de zona y horarios de ida/regreso.
-            </p>
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('profile')}
-                className="inline-flex items-center space-x-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"
-              >
-                <span>Configurar si tengo auto en Mi Perfil</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
+          <RidesHub
+            currentUserId={profile.id}
+            userProfile={profile}
+            initialData={ridesData}
+            onRunMatching={handleRunMatching}
+            onRespondAssignment={handleRespondAssignment}
+          />
         )}
 
         {/* Pestaña: Mi Perfil y Gestión de Miembros */}

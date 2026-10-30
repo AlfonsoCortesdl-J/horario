@@ -273,6 +273,48 @@ async function downloadAsPDF(report: WeeklyReportData) {
     y += rowH;
   }
 
+  // ── Helper para dibujar un bloque de texto con título ────────────────────────
+  const drawTextBox = (title: string, content: string, iconChar: string) => {
+    if (!content) return;
+    y += 6;
+    const boxW = pageW - margin * 2;
+
+    // Wrap text para que quepa dentro del recuadro
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(content, boxW - 10);
+    const textH = lines.length * 4.5;
+    const boxH = textH + 14;
+
+    doc.setFillColor(...C.zinc800);
+    doc.roundedRect(margin, y, boxW, boxH, 2, 2, 'F');
+
+    // Franja de título
+    doc.setFillColor(...C.zinc700);
+    doc.roundedRect(margin, y, boxW, 8, 2, 2, 'F');
+    // esquinas inferiores planas en la franja
+    doc.setFillColor(...C.zinc700);
+    doc.rect(margin, y + 4, boxW, 4, 'F');
+
+    doc.setTextColor(...C.white);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${iconChar}  ${title}`, margin + 4, y + 5.5);
+
+    doc.setTextColor(...C.zinc100);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(lines, margin + 5, y + 13);
+
+    y += boxH;
+  };
+
+  // Sección Actividades realizadas
+  drawTextBox('Actividades realizadas', report.activities, '✦');
+
+  // Sección Notas del ingeniero
+  drawTextBox('Notas del ingeniero', report.engineerNotes, '✎');
+
   // Pie
   y += 6;
   doc.setDrawColor(...C.zinc700);
@@ -296,6 +338,8 @@ export default function ReportPanel() {
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reportTitle, setReportTitle] = useState('Reporte Semanal');
+  const [activities, setActivities] = useState('');
+  const [engineerNotes, setEngineerNotes] = useState('');
   const [report, setReport] = useState<WeeklyReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -335,6 +379,8 @@ export default function ReportPanel() {
       const data = await generateWeeklyReport(
         isPartial ? ids : undefined,
         reportTitle,
+        activities,
+        engineerNotes,
       );
       setReport(data);
       setStep('report');
@@ -383,9 +429,34 @@ export default function ReportPanel() {
                 placeholder="Ej. Sprint 3 · Módulo de login"
                 className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600"
               />
-              <p className="text-[10px] text-zinc-600 mt-1">
-                Este título aparecerá en el PDF generado.
-              </p>
+            </div>
+
+            {/* Actividades realizadas */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                ✦ Actividades realizadas
+              </label>
+              <textarea
+                value={activities}
+                onChange={(e) => setActivities(e.target.value)}
+                placeholder="Describe qué se trabajó esta semana. Ej: Se implementó el módulo de autenticación, se corrigieron 3 bugs del API de horarios, se documentó el flujo de presencia..."
+                rows={4}
+                className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600 resize-none leading-relaxed"
+              />
+            </div>
+
+            {/* Notas del ingeniero */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                ✎ Notas del ingeniero
+              </label>
+              <textarea
+                value={engineerNotes}
+                onChange={(e) => setEngineerNotes(e.target.value)}
+                placeholder="Pendientes, continuación, observaciones técnicas. Ej: Falta integrar pruebas unitarias del módulo X. El endpoint /api/rides requiere revisión de rendimiento. Continuar desde la rama feature/carpooling..."
+                rows={4}
+                className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600 resize-none leading-relaxed"
+              />
             </div>
           </div>
 
@@ -550,6 +621,32 @@ export default function ReportPanel() {
               <span className="text-[11px] text-zinc-400 leading-tight">Día más activo</span>
             </div>
           </div>
+
+          {/* Actividades realizadas */}
+          {report.activities && (
+            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800/60 border-b border-zinc-700/60">
+                <span className="text-zinc-300 text-sm">✦</span>
+                <h3 className="text-xs font-semibold text-zinc-200">Actividades realizadas</h3>
+              </div>
+              <p className="px-4 py-3 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                {report.activities}
+              </p>
+            </div>
+          )}
+
+          {/* Notas del ingeniero */}
+          {report.engineerNotes && (
+            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800/60 border-b border-zinc-700/60">
+                <span className="text-zinc-300 text-sm">✎</span>
+                <h3 className="text-xs font-semibold text-zinc-200">Notas del ingeniero</h3>
+              </div>
+              <p className="px-4 py-3 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                {report.engineerNotes}
+              </p>
+            </div>
+          )}
 
           {/* Cobertura por día */}
           <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4">

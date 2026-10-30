@@ -21,8 +21,10 @@ export interface WeeklyReportData {
   generatedById: string;
   generatedAt: string;
   weekStart: string;
-  reportTitle: string;          // título personalizado del reporte
-  isPartial: boolean;           // true si solo incluye algunos miembros
+  reportTitle: string;
+  isPartial: boolean;
+  activities: string;          // descripción de actividades realizadas
+  engineerNotes: string;       // notas del ingeniero (pendientes, continuación)
   members: MemberReportRow[];
   totalActiveMembers: number;
   teamTotalHours: number;
@@ -78,6 +80,8 @@ export async function getTeamMemberOptions(): Promise<TeamMemberOption[]> {
 export async function generateWeeklyReport(
   selectedMemberIds?: string[],
   reportTitle?: string,
+  activities?: string,
+  engineerNotes?: string,
 ): Promise<WeeklyReportData> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autorizado');
@@ -200,6 +204,8 @@ export async function generateWeeklyReport(
     weekStart: lastResetUtc,
     reportTitle: reportTitle?.trim() || 'Reporte Semanal',
     isPartial: hasFilter ? true : false,
+    activities: activities?.trim() || '',
+    engineerNotes: engineerNotes?.trim() || '',
     members,
     totalActiveMembers: activeMembers.length,
     teamTotalHours: Math.round(teamTotalHours * 10) / 10,

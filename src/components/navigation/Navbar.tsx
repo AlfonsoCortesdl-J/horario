@@ -76,21 +76,6 @@ export default function Navbar({ profile, activeTab, setActiveTab }: NavbarProps
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-lg border-t border-zinc-800/80 py-1.5 px-3 flex justify-around items-center">
         <button
           type="button"
-          onClick={() => setActiveTab('presence')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
-            activeTab === 'presence'
-              ? 'text-white font-medium'
-              : 'text-zinc-500 hover:text-zinc-300'
-          }`}
-        >
-          <div className={`p-1 rounded-lg ${activeTab === 'presence' ? 'bg-zinc-800 text-white' : ''}`}>
-            <Users className="w-4 h-4" />
-          </div>
-          <span className="text-[10px] mt-0.5">Presencia</span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => setActiveTab('availability')}
           className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
             activeTab === 'availability'
@@ -102,6 +87,21 @@ export default function Navbar({ profile, activeTab, setActiveTab }: NavbarProps
             <CalendarClock className="w-4 h-4" />
           </div>
           <span className="text-[10px] mt-0.5">Horarios</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('presence')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+            activeTab === 'presence'
+              ? 'text-white font-medium'
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === 'presence' ? 'bg-zinc-800 text-white' : ''}`}>
+            <Users className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] mt-0.5">Presencia</span>
         </button>
 
         <button

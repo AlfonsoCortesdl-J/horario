@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Profile } from '@/types/database';
 import { 
   User, 
@@ -8,15 +8,18 @@ import {
   MapPin, 
   Phone, 
   Send, 
-  Bell, 
   CheckCircle2, 
   AlertCircle, 
   Users, 
-  Mail, 
-  ShieldAlert,
   Copy,
-  ExternalLink
+  KeyRound,
+  Eye,
+  EyeOff,
+  Edit2,
+  Check,
+  Shield
 } from 'lucide-react';
+import { getAdminMembersList, adminUpdateMemberPassword } from '@/app/actions/auth';
 
 interface ProfileSettingsProps {
   profile: Profile;
@@ -31,24 +34,41 @@ export default function ProfileSettings({
 }: ProfileSettingsProps) {
   const [formData, setFormData] = useState({
     full_name: profile.full_name || '',
-    phone: profile.phone || '',
     has_car: profile.has_car || false,
     available_seats: profile.available_seats || 0,
     pickup_zone: profile.pickup_zone || '',
     default_pickup_point: profile.default_pickup_point || '',
     notify_by_telegram: profile.notify_by_telegram ?? true,
-    notify_by_email: profile.notify_by_email ?? true,
+    notify_by_email: profile.notify_by_email ?? false,
   });
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Estado para invitar miembros (solo admin)
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [inviteMsg, setInviteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Estados exclusivos de administración de contraseñas
+  const [adminMembers, setAdminMembers] = useState<{ id: string; full_name: string; role: string; plain_password: string }[]>([]);
+  const [loadingPasswords, setLoadingPasswords] = useState(false);
+  const [copiedPassId, setCopiedPassId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingPassValue, setEditingPassValue] = useState('');
+  const [savingPass, setSavingPass] = useState(false);
+
+  // Cargar contraseñas si el usuario es administrador
+  useEffect(() => {
+    if (profile.role === 'admin') {
+      setLoadingPasswords(true);
+      getAdminMembersList()
+        .then((list) => {
+          setAdminMembers(list);
+          setLoadingPasswords(false);
+        })
+        .catch((err) => {
+          console.error('Error al cargar contraseñas admin:', err);
+          setLoadingPasswords(false);
+        });
+    }
+  }, [profile.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +76,6 @@ export default function ProfileSettings({
     try {
       await onUpdateProfile({
         full_name: formData.full_name,
-        phone: formData.phone || null,
         has_car: formData.has_car,
         available_seats: formData.has_car ? Number(formData.available_seats) : 0,
         pickup_zone: formData.pickup_zone || null,
@@ -74,62 +93,65 @@ export default function ProfileSettings({
     }
   };
 
-  const handleInviteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!onInviteUser || !inviteName.trim()) return;
+  const copyPassword = (id: string, pass: string) => {
+    navigator.clipboard.writeText(pass);
+    setCopiedPassId(id);
+    setTimeout(() => setCopiedPassId(null), 2000);
+  };
 
-    setInviting(true);
-    setInviteMsg(null);
+  const handleSaveEditedPassword = async (userId: string) => {
+    if (!editingPassValue.trim()) return;
+    setSavingPass(true);
     try {
-      const res = await onInviteUser(inviteName.trim());
-      if (res.success) {
-        setInviteMsg({ type: 'success', text: `¡Miembro ${inviteName} pre-registrado con éxito!` });
-        setInviteName('');
-      } else {
-        setInviteMsg({ type: 'error', text: res.message });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al registrar miembro';
-      setInviteMsg({ type: 'error', text: msg });
+      await adminUpdateMemberPassword(userId, editingPassValue.trim());
+      setAdminMembers((prev) =>
+        prev.map((m) => (m.id === userId ? { ...m, plain_password: editingPassValue.trim() } : m))
+      );
+      setEditingUserId(null);
+      setEditingPassValue('');
+    } catch (err) {
+      console.error(err);
+      alert('Error al actualizar contraseña');
     } finally {
-      setInviting(false);
+      setSavingPass(false);
     }
   };
 
   const copyTelegramCode = () => {
-    if (profile.telegram_verification_code) {
-      navigator.clipboard.writeText(profile.telegram_verification_code);
+    if (profile.telegram_verification_code || profile.id) {
+      const code = profile.telegram_verification_code || profile.id.slice(0, 8);
+      navigator.clipboard.writeText(`/start ${code}`);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-20">
+    <div className="max-w-2xl mx-auto space-y-6 pb-24 text-zinc-100">
       {/* Información del Perfil */}
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-5">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+      <form onSubmit={handleSubmit} className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <User className="w-5 h-5 text-sky-500" />
+            <h2 className="text-base font-semibold text-white flex items-center gap-2">
+              <User className="w-4 h-4 text-emerald-400" />
               Mi Perfil
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Datos para coordinación de presencia y transporte
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Configura tus preferencias de presencia y transporte
             </p>
           </div>
-          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-semibold border ${
             profile.role === 'admin'
-              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
+              : 'bg-zinc-950 text-zinc-400 border-zinc-800'
           }`}>
-            Rol: {profile.role === 'admin' ? 'Administrador' : 'Miembro'}
+            {profile.role === 'admin' ? 'Administrador' : 'Integrante'}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-300 mb-1">
               Nombre Completo
             </label>
             <input
@@ -137,238 +159,230 @@ export default function ProfileSettings({
               required
               value={formData.full_name}
               onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+              className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-              Teléfono / WhatsApp
-            </label>
-            <div className="relative">
-              <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="tel"
-                placeholder="55 1234 5678"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Sección de Transporte / Conductor */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Car className="w-5 h-5 text-sky-500" />
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">¿Tienes vehículo propio?</h3>
-                <p className="text-xs text-slate-500">Para participar como conductor voluntario en carpooling</p>
+          {/* Datos de Automóvil para Carpooling */}
+          <div className="p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Car className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-semibold text-zinc-200">
+                  ¿Tienes auto para apoyar con transporte?
+                </span>
               </div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.has_car}
                 onChange={(e) => setFormData({ ...formData, has_car: e.target.checked })}
-                className="sr-only peer"
+                className="w-4 h-4 rounded bg-zinc-900 border-zinc-700 text-emerald-500 focus:ring-0"
               />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
-            </label>
-          </div>
-
-          {formData.has_car && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-sky-50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/40 animate-in fade-in duration-200">
-              <div>
-                <label className="block text-[11px] font-semibold text-sky-900 dark:text-sky-300 mb-1">
-                  Asientos Libres
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="8"
-                  value={formData.available_seats}
-                  onChange={(e) => setFormData({ ...formData, available_seats: parseInt(e.target.value, 10) || 0 })}
-                  className="w-full px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-800 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-sky-900 dark:text-sky-300 mb-1">
-                  Zona / Colonia de Salida
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej. Garza Sada / Valle"
-                  value={formData.pickup_zone}
-                  onChange={(e) => setFormData({ ...formData, pickup_zone: e.target.value })}
-                  className="w-full px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-800 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-sky-900 dark:text-sky-300 mb-1">
-                  Punto Habitual de Recogida
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej. Oxxo estación / Entrada campus"
-                  value={formData.default_pickup_point}
-                  onChange={(e) => setFormData({ ...formData, default_pickup_point: e.target.value })}
-                  className="w-full px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-800 rounded-lg outline-none"
-                />
-              </div>
             </div>
-          )}
+
+            {formData.has_car && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-900">
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">
+                    Lugares disponibles para compañeros
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="6"
+                    value={formData.available_seats}
+                    onChange={(e) => setFormData({ ...formData, available_seats: Number(e.target.value) })}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-900 border border-zinc-800 rounded-lg outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">
+                    Zona o Punto de partida habitual
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Glorieta del Cartero / TecMM"
+                    value={formData.default_pickup_point}
+                    onChange={(e) => setFormData({ ...formData, default_pickup_point: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-900 border border-zinc-800 rounded-lg outline-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Notificaciones */}
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-          <div className="flex items-center space-x-2">
-            <Bell className="w-5 h-5 text-sky-500" />
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Canales de Notificación</h3>
-          </div>
-          <div className="space-y-2 text-xs">
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.notify_by_telegram}
-                onChange={(e) => setFormData({ ...formData, notify_by_telegram: e.target.checked })}
-                className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-              />
-              <span className="text-slate-700 dark:text-slate-300">Recibir avisos por Telegram (recomendado, instantáneo)</span>
-            </label>
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.notify_by_email}
-                onChange={(e) => setFormData({ ...formData, notify_by_email: e.target.checked })}
-                className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-              />
-              <span className="text-slate-700 dark:text-slate-300">Recibir avisos por Correo Electrónico (respaldo)</span>
-            </label>
-          </div>
-        </div>
-
-        <div className="pt-3 flex items-center justify-between">
+        <div className="pt-2 flex items-center justify-between">
           {success ? (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Perfil guardado con éxito
+            <span className="text-xs text-emerald-400 flex items-center gap-1">
+              <CheckCircle2 className="w-4 h-4" /> Perfil guardado
             </span>
           ) : <span />}
+
           <button
             type="submit"
             disabled={saving}
-            className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium transition-all shadow-md shadow-sky-600/30 disabled:opacity-50"
+            className="px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold transition-all disabled:opacity-50"
           >
             {saving ? 'Guardando...' : 'Guardar Cambios'}
           </button>
         </div>
       </form>
 
+      {/* PANEL EXCLUSIVO DE ADMINISTRADOR: VER Y GESTIONAR CONTRASEÑAS SIN ENCRIPTAR */}
+      {profile.role === 'admin' && (
+        <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+            <div className="flex items-center space-x-2">
+              <KeyRound className="w-4 h-4 text-amber-400" />
+              <h2 className="text-sm font-semibold text-white">
+                Contraseñas del Equipo (Visible solo para Admin)
+              </h2>
+            </div>
+            <span className="text-[10px] bg-amber-950/60 text-amber-300 border border-amber-800/60 px-2 py-0.5 rounded font-mono">
+              Texto Plano
+            </span>
+          </div>
+
+          <p className="text-xs text-zinc-400">
+            Aquí puedes consultar la contraseña de cualquier integrante si la olvida, o cambiarla directamente.
+          </p>
+
+          {loadingPasswords ? (
+            <div className="py-4 text-center text-xs text-zinc-500">
+              Cargando contraseñas del equipo...
+            </div>
+          ) : adminMembers.length === 0 ? (
+            <div className="py-3 text-center text-xs text-zinc-500">
+              No hay integrantes registrados aún.
+            </div>
+          ) : (
+            <div className="divide-y divide-zinc-800/60 border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-950">
+              {adminMembers.map((m) => {
+                const isEditing = editingUserId === m.id;
+
+                return (
+                  <div key={m.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-zinc-900/40 transition-colors">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-7 h-7 rounded-full bg-zinc-800 text-zinc-300 text-xs font-semibold flex items-center justify-center">
+                        {m.full_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                          {m.full_name}
+                          {m.role === 'admin' && (
+                            <span className="text-[9px] text-zinc-500 border border-zinc-800 px-1 rounded">Admin</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingPassValue}
+                            onChange={(e) => setEditingPassValue(e.target.value)}
+                            placeholder="Nueva clave"
+                            className="px-2 py-1 bg-zinc-900 border border-zinc-700 rounded text-xs text-white outline-none w-28"
+                          />
+                          <button
+                            type="button"
+                            disabled={savingPass}
+                            onClick={() => handleSaveEditedPassword(m.id)}
+                            className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs"
+                            title="Guardar contraseña"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingUserId(null);
+                              setEditingPassValue('');
+                            }}
+                            className="p-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-white text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <code className="bg-zinc-900 text-amber-300 px-2.5 py-1 rounded text-xs font-mono font-bold border border-zinc-800">
+                            {m.plain_password}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => copyPassword(m.id, m.plain_password)}
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                            title="Copiar contraseña"
+                          >
+                            {copiedPassId === m.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingUserId(m.id);
+                              setEditingPassValue(m.plain_password === '(Sin contraseña)' ? '' : m.plain_password);
+                            }}
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                            title="Modificar contraseña"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Vinculación con Telegram */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
           <div className="flex items-center space-x-2">
-            <Send className="w-5 h-5 text-sky-500" />
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">Bot de Telegram</h2>
+            <Send className="w-4 h-4 text-zinc-300" />
+            <h2 className="text-sm font-semibold text-white">Alertas por Telegram</h2>
           </div>
           {profile.telegram_chat_id ? (
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Vinculado
+            <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Vinculado
             </span>
           ) : (
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5" /> No vinculado
+            <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
+              No vinculado
             </span>
           )}
         </div>
 
-        <p className="text-xs text-slate-600 dark:text-slate-400">
-          El bot te avisa en segundos si un tramo queda sin compañero, si alguien necesita acompañante o cuando se te asigne un viaje de transporte.
+        <p className="text-xs text-zinc-400">
+          El bot notifica inmediatamente si un tramo horario queda con 1 sola persona o cuando se asigna un viaje.
         </p>
 
-        {profile.telegram_chat_id ? (
-          <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl text-xs text-emerald-800 dark:text-emerald-300">
-            Tu cuenta está vinculada al Chat ID: <span className="font-mono font-bold">{profile.telegram_chat_id}</span>. Ya puedes recibir todas las alertas en tiempo real.
-          </div>
-        ) : (
-          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
-            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Instrucciones para vincular tu Telegram en 2 pasos:
-            </div>
-            <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-2 list-decimal list-inside">
-              <li>Abre nuestro bot en Telegram buscándolo como el bot configurado por tu admin.</li>
-              <li>Envíale el siguiente comando con tu código único:</li>
-            </ol>
-            <div className="flex items-center space-x-2">
-              <code className="flex-1 bg-slate-900 text-sky-400 px-3 py-2 rounded-lg font-mono text-xs select-all">
-                /start {profile.telegram_verification_code || profile.id.slice(0, 8)}
-              </code>
-              <button
-                type="button"
-                onClick={copyTelegramCode}
-                className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                {copiedCode ? 'Copiado' : 'Copiar'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Panel Exclusivo de Administrador: Invitar Miembros */}
-      {profile.role === 'admin' && onInviteUser && (
-        <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center space-x-2 pb-3 border-b border-amber-100 dark:border-amber-950/60">
-            <Users className="w-5 h-5 text-amber-500" />
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Gestión de Miembros (Solo Admin)
-            </h2>
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            Puedes pre-registrar a los compañeros del equipo para que aparezcan en la lista de selección al abrir la app.
-          </p>
-
-          <form onSubmit={handleInviteSubmit} className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                Nombre de la persona
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="Ej. Sofía Martínez"
-                value={inviteName}
-                onChange={(e) => setInviteName(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500"
-              />
-            </div>
-
-            {inviteMsg && (
-              <div className={`p-2.5 rounded-xl text-xs flex items-center space-x-2 ${
-                inviteMsg.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
-                  : 'bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300'
-              }`}>
-                {inviteMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                <span>{inviteMsg.text}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={inviting}
-              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-all shadow-md shadow-amber-600/20 disabled:opacity-50"
-            >
-              {inviting ? 'Guardando...' : 'Pre-registrar Miembro'}
-            </button>
-          </form>
+        <div className="flex items-center space-x-2 pt-1">
+          <code className="flex-1 bg-zinc-950 text-zinc-300 border border-zinc-800 px-3 py-2 rounded-xl font-mono text-xs select-all">
+            /start {profile.telegram_verification_code || profile.id.slice(0, 8)}
+          </code>
+          <button
+            type="button"
+            onClick={copyTelegramCode}
+            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-medium flex items-center gap-1 transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>{copiedCode ? 'Copiado' : 'Copiar'}</span>
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

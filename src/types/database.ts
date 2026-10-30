@@ -16,6 +16,7 @@ export interface Profile {
   is_active: boolean;
   has_car: boolean;
   available_seats: number;
+  password?: string | null;
   pickup_zone: string | null;
   default_pickup_point: string | null;
   telegram_chat_id: number | null;

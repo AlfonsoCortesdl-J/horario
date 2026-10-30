@@ -42,7 +42,7 @@ export default function DashboardClient({
   initialCoverageSlots,
   initialRidesData,
 }: DashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<'availability' | 'presence' | 'rides' | 'profile'>('presence');
+  const [activeTab, setActiveTab] = useState<'availability' | 'presence' | 'rides' | 'profile'>('availability');
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [userSlots, setUserSlots] = useState<AvailabilitySlot[]>(initialUserSlots);
   const [allSlots, setAllSlots] = useState<AvailabilitySlot[]>(initialAllSlots);

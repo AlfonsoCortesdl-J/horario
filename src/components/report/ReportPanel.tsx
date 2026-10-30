@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import {
-  generateWeeklyReport,
-  getTeamMemberOptions,
-  WeeklyReportData,
-  TeamMemberOption,
+  SessionReport,
+  TeamMemberAvailabilityForDate,
+  getMexicoCityToday,
+  getTeamAvailabilityForDate,
+  getSessionReports,
+  saveSessionReport,
 } from '@/app/actions/report';
 import {
   FileText,
@@ -14,39 +16,44 @@ import {
   Users,
   Clock,
   Calendar,
-  TrendingUp,
-  CheckCircle2,
   AlertCircle,
-  User,
-  CheckSquare,
+  Plus,
+  ArrowLeft,
+  Lock,
+  Unlock,
+  CheckCircle2,
   Square,
+  CheckSquare,
   Pencil,
+  Save,
+  Info,
 } from 'lucide-react';
 
-const DAY_ORDER = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString('es-MX', {
-    timeZone: 'America/Mexico_City',
+function fmtDateVerbose(dateStr: string) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(Number);
+  const dateObj = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+  return dateObj.toLocaleDateString('es-MX', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+  });
+}
+
+function fmtTimestamp(iso: string) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
 }
 
-function fmtShortDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-MX', {
-    timeZone: 'America/Mexico_City',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-async function downloadAsPDF(report: WeeklyReportData) {
+async function downloadSessionPDF(report: SessionReport) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
@@ -65,6 +72,7 @@ async function downloadAsPDF(report: WeeklyReportData) {
     amber: [251, 191, 36] as [number, number, number],
   };
 
+  // Fondo oscuro
   doc.setFillColor(...C.bg);
   doc.rect(0, 0, pageW, 297, 'F');
 
@@ -75,34 +83,30 @@ async function downloadAsPDF(report: WeeklyReportData) {
   doc.setTextColor(...C.white);
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
-  doc.text(report.reportTitle, margin + 5, y + 10);
+  doc.text(report.title, margin + 5, y + 10);
 
-  if (report.isPartial) {
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...C.amber);
-    doc.text('Reporte parcial — equipo seleccionado', margin + 5, y + 16);
-    doc.setTextColor(...C.zinc400);
-    doc.text(`TecMM Zapopan · Semana del ${fmtShortDate(report.weekStart)}`, margin + 5, y + 21);
-    doc.text(`Generado por ${report.generatedBy} · ${fmtDate(report.generatedAt)}`, margin + 5, y + 26);
-  } else {
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...C.zinc400);
-    doc.text(`Equipo TecMM Zapopan · Semana del ${fmtShortDate(report.weekStart)}`, margin + 5, y + 18);
-    doc.text(`Generado por ${report.generatedBy} · ${fmtDate(report.generatedAt)}`, margin + 5, y + 24);
-  }
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...C.emerald);
+  doc.text(`Fecha de sesión: ${fmtDateVerbose(report.session_date)}`, margin + 5, y + 17);
+
+  doc.setTextColor(...C.zinc400);
+  doc.text(
+    `Registrado por ${report.author_name} · Registrado el ${fmtTimestamp(report.created_at)}`,
+    margin + 5,
+    y + 24
+  );
   y += 36;
 
-  // Cards resumen
+  // Tarjetas resumen
+  const cardW = (pageW - margin * 2 - 8) / 2;
   const cards = [
-    { label: 'Integrantes', value: `${report.totalActiveMembers}`, sub: 'con disponibilidad' },
-    { label: 'Horas totales', value: `${report.teamTotalHours}h`, sub: 'del grupo' },
-    { label: 'Día más activo', value: report.mostActiveDay, sub: 'mayor cobertura' },
+    { label: 'Integrantes en sesión', value: `${report.members.length} personas`, sub: 'colaboradores presentes' },
+    { label: 'Horas totales acumuladas', value: `${report.total_hours}h`, sub: 'según horario registrado' },
   ];
-  const cardW = (pageW - margin * 2 - 8) / 3;
+
   cards.forEach((c, i) => {
-    const cx = margin + i * (cardW + 4);
+    const cx = margin + i * (cardW + 8);
     doc.setFillColor(...C.zinc800);
     doc.roundedRect(cx, y, cardW, 20, 2, 2, 'F');
     doc.setTextColor(...C.emerald);
@@ -110,61 +114,56 @@ async function downloadAsPDF(report: WeeklyReportData) {
     doc.setFont('helvetica', 'bold');
     doc.text(c.value, cx + 4, y + 10);
     doc.setTextColor(...C.zinc400);
-    doc.setFontSize(7);
+    doc.setFontSize(7.5);
     doc.setFont('helvetica', 'normal');
     doc.text(c.label, cx + 4, y + 15);
-    doc.text(c.sub, cx + 4, y + 19);
   });
   y += 26;
 
-  // Cobertura por día
-  doc.setFillColor(...C.zinc800);
-  doc.roundedRect(margin, y, pageW - margin * 2, 30, 2, 2, 'F');
-  doc.setTextColor(...C.white);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Personas disponibles por día', margin + 4, y + 7);
-
-  const activeDays = DAY_ORDER.filter((d) => d in report.coverageByDay);
-  if (activeDays.length > 0) {
-    const maxCov = Math.max(...Object.values(report.coverageByDay));
-    const barAreaW = pageW - margin * 2 - 8;
-    const barSlot = barAreaW / 7;
-    DAY_ORDER.forEach((day, i) => {
-      const count = report.coverageByDay[day] || 0;
-      const bx = margin + 4 + i * barSlot;
-      const barH = maxCov > 0 ? Math.round((count / maxCov) * 12) : 0;
-      if (count > 0) {
-        doc.setFillColor(...C.emerald);
-        doc.roundedRect(bx, y + 22 - barH, barSlot - 2, barH, 1, 1, 'F');
-        doc.setTextColor(...C.emerald);
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.text(String(count), bx, y + 22 - barH - 1);
-      }
-      doc.setTextColor(...C.zinc400);
-      doc.setFontSize(6.5);
-      doc.setFont('helvetica', 'normal');
-      doc.text(day, bx, y + 27);
-    });
-  } else {
-    doc.setTextColor(...C.zinc400);
+  // Helper para cajas de texto descriptivas
+  const drawTextBox = (title: string, content: string, iconChar: string) => {
+    if (!content) return;
+    const boxW = pageW - margin * 2;
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text('Sin datos de disponibilidad', margin + 4, y + 18);
-  }
-  y += 36;
+    const lines = doc.splitTextToSize(content, boxW - 10);
+    const textH = lines.length * 4.5;
+    const boxH = textH + 14;
 
-  // Tabla con fotos
+    doc.setFillColor(...C.zinc800);
+    doc.roundedRect(margin, y, boxW, boxH, 2, 2, 'F');
+
+    // Barra de título
+    doc.setFillColor(...C.zinc700);
+    doc.roundedRect(margin, y, boxW, 8, 2, 2, 'F');
+    doc.rect(margin, y + 4, boxW, 4, 'F');
+
+    doc.setTextColor(...C.white);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${iconChar}  ${title}`, margin + 4, y + 5.5);
+
+    doc.setTextColor(...C.zinc100);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(lines, margin + 5, y + 13);
+
+    y += boxH + 6;
+  };
+
+  drawTextBox('Actividades realizadas en la sesión', report.activities, '✦');
+  drawTextBox('Notas del ingeniero (Continuación y pendientes)', report.engineer_notes, '✎');
+
+  // Tabla de Integrantes
   doc.setTextColor(...C.white);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text('Disponibilidad por integrante', margin, y + 5);
-  y += 8;
+  doc.text('Integrantes participantes y horas registradas', margin, y + 4);
+  y += 7;
 
   const avatarColW = 14;
-  const cols = [avatarColW, 44, 20, 20, 22, 28, 28] as const;
-  const headers = ['', 'Nombre', 'Horas', 'Bloques', 'Días', 'Desde', 'Hasta'];
+  const cols = [avatarColW, 70, 50, 48] as const;
+  const headers = ['', 'Nombre', 'Horario según registro', 'Horas'];
   let cx = margin;
   doc.setFillColor(...C.zinc700);
   doc.rect(margin, y, pageW - margin * 2, 7, 'F');
@@ -249,116 +248,135 @@ async function downloadAsPDF(report: WeeklyReportData) {
       drawInitialAvatar(m.full_name, avatarX, midY, avatarR);
     }
 
-    const isActive = m.totalSlots > 0;
-    doc.setTextColor(...(isActive ? C.zinc100 : C.zinc400));
+    doc.setTextColor(...C.zinc100);
     doc.setFontSize(7.5);
-    doc.setFont('helvetica', isActive ? 'normal' : 'italic');
+    doc.setFont('helvetica', 'normal');
 
     const rowData = [
-      '', m.full_name + (m.role === 'admin' ? ' ★' : ''),
-      isActive ? `${m.totalHours}h` : '—',
-      isActive ? String(m.totalSlots) : '—',
-      isActive ? m.days.join(', ') : '—',
-      m.earliestStart, m.latestEnd,
+      '',
+      m.full_name + (m.role === 'admin' ? ' ★' : ''),
+      m.time_range,
+      m.hours > 0 ? `${m.hours} hrs` : '0 hrs',
     ];
+
     cx = margin;
     rowData.forEach((val, i) => {
       if (val) doc.text(val, cx + 2, midY + 2.5);
       cx += cols[i];
     });
-    if (isActive) {
-      doc.setFillColor(...C.emerald);
-      doc.circle(pageW - margin - 2, midY, 1.2, 'F');
-    }
+
     y += rowH;
   }
 
-  // ── Helper para dibujar un bloque de texto con título ────────────────────────
-  const drawTextBox = (title: string, content: string, iconChar: string) => {
-    if (!content) return;
-    y += 6;
-    const boxW = pageW - margin * 2;
-
-    // Wrap text para que quepa dentro del recuadro
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    const lines = doc.splitTextToSize(content, boxW - 10);
-    const textH = lines.length * 4.5;
-    const boxH = textH + 14;
-
-    doc.setFillColor(...C.zinc800);
-    doc.roundedRect(margin, y, boxW, boxH, 2, 2, 'F');
-
-    // Franja de título
-    doc.setFillColor(...C.zinc700);
-    doc.roundedRect(margin, y, boxW, 8, 2, 2, 'F');
-    // esquinas inferiores planas en la franja
-    doc.setFillColor(...C.zinc700);
-    doc.rect(margin, y + 4, boxW, 4, 'F');
-
-    doc.setTextColor(...C.white);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${iconChar}  ${title}`, margin + 4, y + 5.5);
-
-    doc.setTextColor(...C.zinc100);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text(lines, margin + 5, y + 13);
-
-    y += boxH;
-  };
-
-  // Sección Actividades realizadas
-  drawTextBox('Actividades realizadas', report.activities, '✦');
-
-  // Sección Notas del ingeniero
-  drawTextBox('Notas del ingeniero', report.engineerNotes, '✎');
-
-  // Pie
-  y += 6;
+  // Pie de página
+  y += 8;
   doc.setDrawColor(...C.zinc700);
   doc.line(margin, y, pageW - margin, y);
   y += 5;
   doc.setTextColor(...C.zinc400);
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Coordinación TecMM Zapopan · ${fmtDate(report.generatedAt)}`, pageW / 2, y, { align: 'center' });
-  doc.text(`Reporte generado por ${report.generatedBy}${report.isPartial ? ' · Reporte parcial' : ''}`, pageW / 2, y + 4, { align: 'center' });
+  doc.text(`Coordinación TecMM Zapopan · Reporte Oficial de Sesión`, pageW / 2, y, { align: 'center' });
+  doc.text(`Registrado por ${report.author_name} el ${fmtTimestamp(report.created_at)}`, pageW / 2, y + 4, { align: 'center' });
 
-  const fileName = `${report.reportTitle.replace(/\s+/g, '-').toLowerCase()}-${fmtShortDate(report.generatedAt).replace(/\//g, '-')}.pdf`;
+  const fileName = `sesion-${report.session_date}-${report.title.replace(/\s+/g, '-').toLowerCase()}.pdf`;
   doc.save(fileName);
 }
 
-// ─── Componente principal ────────────────────────────────────────────────────
-
 export default function ReportPanel() {
-  const [step, setStep] = useState<'configure' | 'report'>('configure');
-  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [reportTitle, setReportTitle] = useState('Reporte Semanal');
-  const [activities, setActivities] = useState('');
-  const [engineerNotes, setEngineerNotes] = useState('');
-  const [report, setReport] = useState<WeeklyReportData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'history' | 'view' | 'form'>('history');
+  const [reports, setReports] = useState<SessionReport[]>([]);
+  const [selectedReport, setSelectedReport] = useState<SessionReport | null>(null);
+  const [loadingReports, setLoadingReports] = useState(true);
 
-  // Cargar lista de miembros al montar
+  // Estados del Formulario (Crear / Editar)
+  const [todayStr, setTodayStr] = useState('');
+  const [formId, setFormId] = useState<string | undefined>(undefined);
+  const [formDate, setFormDate] = useState('');
+  const [formTitle, setFormTitle] = useState('');
+  const [formActivities, setFormActivities] = useState('');
+  const [formNotes, setFormNotes] = useState('');
+  const [teamAvailability, setTeamAvailability] = useState<TeamMemberAvailabilityForDate[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [savingForm, setSavingForm] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Cargar lista de reportes y fecha de hoy en MX
+  const refreshReportsList = async () => {
+    setLoadingReports(true);
+    try {
+      const [all, today] = await Promise.all([
+        getSessionReports(),
+        getMexicoCityToday(),
+      ]);
+      setReports(all);
+      setTodayStr(today);
+    } catch (err: unknown) {
+      console.error(err);
+      setErrorMessage(err instanceof Error ? err.message : 'Error al cargar reportes');
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
   useEffect(() => {
-    getTeamMemberOptions()
-      .then((members) => {
-        setTeamMembers(members);
-        // Seleccionar todos por defecto
-        setSelectedIds(new Set(members.map((m) => m.id)));
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoadingMembers(false));
+    refreshReportsList();
   }, []);
 
-  const toggleMember = (id: string) => {
-    setSelectedIds((prev) => {
+  // Cargar disponibilidad del equipo cuando cambia la fecha del formulario
+  useEffect(() => {
+    if (!formDate) return;
+    setLoadingAvailability(true);
+    getTeamAvailabilityForDate(formDate)
+      .then((members) => {
+        setTeamAvailability(members);
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        setLoadingAvailability(false);
+      });
+  }, [formDate]);
+
+  // Iniciar creación de un nuevo reporte para hoy
+  const handleStartNewReport = () => {
+    setFormId(undefined);
+    setFormDate(todayStr);
+    setFormTitle('Sesión de trabajo');
+    setFormActivities('');
+    setFormNotes('');
+    setSelectedMemberIds(new Set());
+    setErrorMessage(null);
+    setViewMode('form');
+  };
+
+  // Iniciar edición de un reporte existente (solo permitido si es hoy)
+  const handleStartEditReport = (r: SessionReport) => {
+    if (!r.is_editable) {
+      alert('Este reporte corresponde a una fecha anterior y está bloqueado contra edición. Solo lectura.');
+      return;
+    }
+    setFormId(r.id);
+    setFormDate(r.session_date);
+    setFormTitle(r.title);
+    setFormActivities(r.activities);
+    setFormNotes(r.engineer_notes);
+    setSelectedMemberIds(new Set(r.members.map((m) => m.id)));
+    setErrorMessage(null);
+    setViewMode('form');
+  };
+
+  // Ver un reporte
+  const handleSelectReport = (r: SessionReport) => {
+    setSelectedReport(r);
+    setViewMode('view');
+  };
+
+  const toggleMemberCheckbox = (id: string) => {
+    setSelectedMemberIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -366,386 +384,554 @@ export default function ReportPanel() {
     });
   };
 
-  const selectAll = () => setSelectedIds(new Set(teamMembers.map((m) => m.id)));
-  const clearAll = () => setSelectedIds(new Set());
-  const isAllSelected = selectedIds.size === teamMembers.length;
+  const handleSelectAllMembers = () => {
+    setSelectedMemberIds(new Set(teamAvailability.map((m) => m.id)));
+  };
 
-  const handleGenerate = async () => {
-    setLoading(true);
-    setError(null);
+  const handleClearAllMembers = () => {
+    setSelectedMemberIds(new Set());
+  };
+
+  // Guardar formulario
+  const handleSubmitForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedMemberIds.size === 0) {
+      alert('Selecciona al menos a 1 integrante que haya participado en la sesión.');
+      return;
+    }
+
+    setSavingForm(true);
+    setErrorMessage(null);
     try {
-      const ids = [...selectedIds];
-      const isPartial = ids.length < teamMembers.length;
-      const data = await generateWeeklyReport(
-        isPartial ? ids : undefined,
-        reportTitle,
-        activities,
-        engineerNotes,
-      );
-      setReport(data);
-      setStep('report');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error al generar reporte');
+      const res = await saveSessionReport({
+        id: formId,
+        title: formTitle,
+        session_date: formDate,
+        activities: formActivities,
+        engineer_notes: formNotes,
+        selected_member_ids: [...selectedMemberIds],
+      });
+
+      await refreshReportsList();
+
+      // Buscar el reporte actualizado y mostrarlo en vista
+      const all = await getSessionReports();
+      const updated = all.find((item) => item.id === res.reportId);
+      if (updated) {
+        setSelectedReport(updated);
+        setViewMode('view');
+      } else {
+        setViewMode('history');
+      }
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error al guardar reporte');
     } finally {
-      setLoading(false);
+      setSavingForm(false);
     }
   };
 
-  const handleDownload = async () => {
-    if (!report) return;
-    setDownloading(true);
+  // Descarga PDF
+  const handleDownloadPdf = async (rep: SessionReport) => {
+    setDownloadingPdf(true);
     try {
-      await downloadAsPDF(report);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error al generar PDF');
+      await downloadSessionPDF(rep);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al generar PDF');
     } finally {
-      setDownloading(false);
+      setDownloadingPdf(false);
     }
   };
+
+  // Cálculo de horas en vivo en el formulario
+  const formCalculatedHours = teamAvailability
+    .filter((m) => selectedMemberIds.has(m.id))
+    .reduce((sum, m) => sum + m.hours, 0);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-24">
+    <div className="max-w-2xl mx-auto space-y-4 pb-24 text-zinc-100">
 
-      {/* ── PASO 1: Configurar ── */}
-      {step === 'configure' && (
-        <>
-          {/* Título */}
-          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800/80">
-              <FileText className="w-4 h-4 text-zinc-300" />
-              <h2 className="text-base font-semibold text-white">Nuevo Reporte</h2>
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* MODO 1: HISTORIAL DE REPORTES                                          */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'history' && (
+        <div className="space-y-4">
+          {/* Header con botón para nueva sesión */}
+          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-emerald-400" />
+                Reportes por Sesión
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Bitácoras de trabajo por jornada. Se pueden editar solo el mismo día; después quedan archivadas en solo lectura.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleStartNewReport}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold transition-all shadow-sm flex-shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Nueva Sesión de Hoy
+            </button>
+          </div>
+
+          {/* Lista de reportes guardados */}
+          {loadingReports ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-20 bg-zinc-900/50 border border-zinc-800/60 rounded-2xl animate-pulse" />
+              ))}
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-12 text-center flex flex-col items-center justify-center gap-3">
+              <Calendar className="w-10 h-10 text-zinc-600" />
+              <div className="text-sm font-medium text-zinc-300">No hay sesiones registradas aún</div>
+              <p className="text-xs text-zinc-500 max-w-sm">
+                Crea el primer reporte de la jornada seleccionando quiénes asistieron hoy y redactando las actividades realizadas.
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewReport}
+                className="mt-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold"
+              >
+                Comenzar reporte de hoy
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reports.map((r) => {
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => handleSelectReport(r)}
+                    className="bg-zinc-900/70 border border-zinc-800/80 hover:border-zinc-700 rounded-2xl p-4 cursor-pointer transition-all hover:bg-zinc-900 group space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
+                            {r.title}
+                          </h3>
+                          {r.is_editable ? (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
+                              <Unlock className="w-2.5 h-2.5" /> Editable hoy
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+                              <Lock className="w-2.5 h-2.5" /> Solo lectura
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1 capitalize">
+                          {fmtDateVerbose(r.session_date)}
+                        </p>
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-sm font-bold text-white">{r.total_hours}h</span>
+                        <div className="text-[10px] text-zinc-500">{r.members.length} integrantes</div>
+                      </div>
+                    </div>
+
+                    {/* Preview de actividades */}
+                    {r.activities && (
+                      <p className="text-xs text-zinc-400 line-clamp-2 bg-zinc-950/40 p-2.5 rounded-xl border border-zinc-800/60 font-sans">
+                        {r.activities}
+                      </p>
+                    )}
+
+                    {/* Pie de tarjeta */}
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 border-t border-zinc-800/50">
+                      <span>Registrado por <span className="text-zinc-300 font-medium">{r.author_name}</span></span>
+                      <span className="text-zinc-600">Ver detalles →</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* MODO 2: DETALLE Y VISUALIZACIÓN DE UNA SESIÓN                          */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'view' && selectedReport && (
+        <div className="space-y-4">
+          {/* Barra superior de acciones */}
+          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setViewMode('history')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-all"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Historial
+            </button>
+
+            <div className="flex items-center gap-2">
+              {selectedReport.is_editable && (
+                <button
+                  type="button"
+                  onClick={() => handleStartEditReport(selectedReport)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-all"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Editar
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={downloadingPdf}
+                onClick={() => handleDownloadPdf(selectedReport)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold transition-all disabled:opacity-50"
+              >
+                {downloadingPdf ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                Descargar PDF
+              </button>
+            </div>
+          </div>
+
+          {/* Banner de estado de edición */}
+          <div className={`p-3 rounded-2xl border flex items-center gap-2.5 text-xs ${
+            selectedReport.is_editable
+              ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
+              : 'bg-zinc-900/80 border-zinc-800/80 text-zinc-400'
+          }`}>
+            {selectedReport.is_editable ? (
+              <>
+                <Unlock className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                <span>Sesión de hoy activa. Puedes editar los integrantes, actividades y notas durante el día de hoy.</span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-4 h-4 flex-shrink-0 text-zinc-500" />
+                <span>Sesión archivada de fecha anterior. Protegida contra modificaciones (Solo lectura y descarga de PDF).</span>
+              </>
+            )}
+          </div>
+
+          {/* Encabezado del reporte */}
+          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 space-y-3">
+            <div>
+              <h2 className="text-lg font-bold text-white">{selectedReport.title}</h2>
+              <p className="text-xs text-zinc-400 capitalize mt-0.5">
+                {fmtDateVerbose(selectedReport.session_date)}
+              </p>
             </div>
 
-            {/* Campo de título */}
-            <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5 flex items-center gap-1.5">
-                <Pencil className="w-3.5 h-3.5 text-zinc-400" />
-                Título del reporte
-              </label>
-              <input
-                type="text"
-                value={reportTitle}
-                onChange={(e) => setReportTitle(e.target.value)}
-                placeholder="Ej. Sprint 3 · Módulo de login"
-                className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600"
-              />
+            <div className="text-xs text-zinc-500 flex items-center gap-1.5 pt-2 border-t border-zinc-800/60">
+              <span>Registrado por <strong className="text-zinc-300">{selectedReport.author_name}</strong></span>
+              <span>·</span>
+              <span>{fmtTimestamp(selectedReport.created_at)}</span>
+            </div>
+          </div>
+
+          {/* Métricas clave */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-1">
+              <Users className="w-4 h-4 text-emerald-400" />
+              <span className="text-2xl font-bold text-white">{selectedReport.members.length}</span>
+              <span className="text-xs text-zinc-400">Integrantes participantes</span>
+            </div>
+            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-1">
+              <Clock className="w-4 h-4 text-zinc-300" />
+              <span className="text-2xl font-bold text-white">{selectedReport.total_hours}h</span>
+              <span className="text-xs text-zinc-400">Horas acumuladas según horario</span>
+            </div>
+          </div>
+
+          {/* Recuadro: Actividades Realizadas */}
+          {selectedReport.activities && (
+            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800/60 border-b border-zinc-700/60">
+                <span className="text-emerald-400 text-sm">✦</span>
+                <h3 className="text-xs font-semibold text-zinc-200">Actividades realizadas en la sesión</h3>
+              </div>
+              <p className="px-4 py-3.5 text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap font-sans">
+                {selectedReport.activities}
+              </p>
+            </div>
+          )}
+
+          {/* Recuadro: Notas del Ingeniero */}
+          {selectedReport.engineer_notes && (
+            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800/60 border-b border-zinc-700/60">
+                <span className="text-amber-400 text-sm">✎</span>
+                <h3 className="text-xs font-semibold text-zinc-200">Notas del ingeniero (Continuación y pendientes)</h3>
+              </div>
+              <p className="px-4 py-3.5 text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap font-sans">
+                {selectedReport.engineer_notes}
+              </p>
+            </div>
+          )}
+
+          {/* Tabla de Integrantes */}
+          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-4 py-3 border-b border-zinc-800/80 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-zinc-400" />
+                <h3 className="text-xs font-semibold text-white">Integrantes y horas según su horario</h3>
+              </div>
+              <span className="text-[11px] text-zinc-500">{selectedReport.members.length} colaboradores</span>
+            </div>
+
+            <div className="divide-y divide-zinc-800/50">
+              {selectedReport.members.map((m) => (
+                <div key={m.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300">
+                      {m.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.avatar_url} alt={m.full_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{m.full_name.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-zinc-100 truncate">{m.full_name}</span>
+                        {m.role === 'admin' && (
+                          <span className="text-[9px] text-zinc-500 border border-zinc-700 px-1 rounded flex-shrink-0">Admin</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        {m.time_range}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <span className="text-sm font-bold text-white">{m.hours}h</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* MODO 3: FORMULARIO CREAR / EDITAR SESIÓN                              */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {viewMode === 'form' && (
+        <form onSubmit={handleSubmitForm} className="space-y-4">
+          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-emerald-400" />
+                <h2 className="text-base font-semibold text-white">
+                  {formId ? 'Editar Reporte de Sesión' : 'Nueva Sesión de Trabajo'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewMode(selectedReport ? 'view' : 'history')}
+                className="text-xs text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+
+            {/* Error si ocurre */}
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Fecha de la sesión */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Fecha de la sesión
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formDate}
+                  onChange={(e) => setFormDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  {formDate === todayStr ? '🟢 Fecha de hoy (podrás editarla hoy)' : '⚠️ Fecha distinta a hoy'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Título de la jornada o sesión
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej. Avance en suspensión y corte"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600"
+                />
+              </div>
             </div>
 
             {/* Actividades realizadas */}
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                ✦ Actividades realizadas
+              <label className="block text-xs font-medium text-zinc-300 mb-1 flex items-center gap-1.5">
+                <span className="text-emerald-400">✦</span>
+                Actividades realizadas en esta sesión
               </label>
               <textarea
-                value={activities}
-                onChange={(e) => setActivities(e.target.value)}
-                placeholder="Describe qué se trabajó esta semana. Ej: Se implementó el módulo de autenticación, se corrigieron 3 bugs del API de horarios, se documentó el flujo de presencia..."
+                required
                 rows={4}
-                className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600 resize-none leading-relaxed"
+                value={formActivities}
+                onChange={(e) => setFormActivities(e.target.value)}
+                placeholder="Describe qué se hizo en conjunto durante esta sesión de trabajo..."
+                className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600 resize-none leading-relaxed"
               />
             </div>
 
             {/* Notas del ingeniero */}
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                ✎ Notas del ingeniero
+              <label className="block text-xs font-medium text-zinc-300 mb-1 flex items-center gap-1.5">
+                <span className="text-amber-400">✎</span>
+                Notas del ingeniero (Continuación y pendientes)
               </label>
               <textarea
-                value={engineerNotes}
-                onChange={(e) => setEngineerNotes(e.target.value)}
-                placeholder="Pendientes, continuación, observaciones técnicas. Ej: Falta integrar pruebas unitarias del módulo X. El endpoint /api/rides requiere revisión de rendimiento. Continuar desde la rama feature/carpooling..."
                 rows={4}
-                className="w-full px-3 py-2 text-sm bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600 resize-none leading-relaxed"
+                value={formNotes}
+                onChange={(e) => setFormNotes(e.target.value)}
+                placeholder="Indica qué quedó pendiente, en qué punto se va a continuar la siguiente sesión o si hubo algún imprevisto técnico..."
+                className="w-full px-3 py-2 text-xs bg-zinc-950 border border-zinc-800 rounded-xl focus:border-zinc-500 outline-none text-zinc-100 placeholder:text-zinc-600 resize-none leading-relaxed"
               />
             </div>
           </div>
 
-          {/* Seleccionar miembros */}
+          {/* Selector de integrantes con horas automáticas según su horario */}
           <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/80">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-zinc-400" />
-                <h3 className="text-sm font-semibold text-white">
-                  Integrantes del reporte
+            <div className="px-4 py-3 border-b border-zinc-800/80 flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-zinc-400" />
+                  Integrantes presentes en esta sesión
                 </h3>
-                <span className="text-[11px] text-zinc-500">
-                  ({selectedIds.size} de {teamMembers.length})
-                </span>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  Las horas se toman automáticamente del horario de cada persona para este día.
+                </p>
               </div>
-              <button
-                onClick={isAllSelected ? clearAll : selectAll}
-                className="text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                {isAllSelected ? 'Quitar todos' : 'Seleccionar todos'}
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={selectedMemberIds.size === teamAvailability.length ? handleClearAllMembers : handleSelectAllMembers}
+                  className="text-[11px] text-zinc-400 hover:text-white"
+                >
+                  {selectedMemberIds.size === teamAvailability.length ? 'Quitar todos' : 'Todos'}
+                </button>
+              </div>
             </div>
 
-            {loadingMembers ? (
-              <div className="py-8 text-center text-xs text-zinc-500">Cargando equipo...</div>
+            {loadingAvailability ? (
+              <div className="p-8 text-center text-xs text-zinc-500">Calculando horarios del día...</div>
             ) : (
               <div className="divide-y divide-zinc-800/50">
-                {teamMembers.map((m) => {
-                  const checked = selectedIds.has(m.id);
+                {teamAvailability.map((m) => {
+                  const isChecked = selectedMemberIds.has(m.id);
                   return (
-                    <button
+                    <div
                       key={m.id}
-                      type="button"
-                      onClick={() => toggleMember(m.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                        checked ? 'bg-zinc-900/40' : 'hover:bg-zinc-900/20 opacity-50'
+                      onClick={() => toggleMemberCheckbox(m.id)}
+                      className={`px-4 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                        isChecked ? 'bg-zinc-900/80' : 'opacity-50 hover:opacity-80'
                       }`}
                     >
-                      {/* Checkbox */}
-                      <div className="flex-shrink-0 text-emerald-400">
-                        {checked
-                          ? <CheckSquare className="w-4 h-4" />
-                          : <Square className="w-4 h-4 text-zinc-600" />}
-                      </div>
-
-                      {/* Avatar */}
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold">
-                        {m.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={m.avatar_url} alt={m.full_name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-zinc-300">{m.full_name.charAt(0).toUpperCase()}</span>
-                        )}
-                      </div>
-
-                      {/* Nombre */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-zinc-100 truncate">{m.full_name}</span>
-                          {m.role === 'admin' && (
-                            <span className="text-[9px] text-zinc-500 border border-zinc-700 px-1 rounded flex-shrink-0">Admin</span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="text-emerald-400 flex-shrink-0">
+                          {isChecked ? (
+                            <CheckSquare className="w-4 h-4" />
+                          ) : (
+                            <Square className="w-4 h-4 text-zinc-600" />
                           )}
+                        </div>
+
+                        <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300">
+                          {m.avatar_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={m.avatar_url} alt={m.full_name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{m.full_name.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="text-xs font-semibold text-zinc-100 truncate block">
+                            {m.full_name}
+                          </span>
+                          <span className="text-[10px] text-zinc-500 block truncate">
+                            {m.time_range}
+                          </span>
                         </div>
                       </div>
 
-                      {/* Indicador seleccionado */}
-                      {checked && (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                      )}
-                    </button>
+                      <div className="text-right flex-shrink-0">
+                        <span className={`text-xs font-bold ${m.hours > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                          {m.hours > 0 ? `${m.hours}h` : '0h'}
+                        </span>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
             )}
+
+            {/* Barra de total seleccionado */}
+            <div className="p-3 bg-zinc-950/80 border-t border-zinc-800/80 flex items-center justify-between text-xs">
+              <span className="text-zinc-400">
+                Total acumulado en sesión: <strong className="text-white">{selectedMemberIds.size} integrantes</strong>
+              </span>
+              <span className="text-emerald-400 font-bold text-sm">
+                {Math.round(formCalculatedHours * 10) / 10}h de trabajo
+              </span>
+            </div>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className="flex items-center gap-2 px-4 py-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {error}
-            </div>
-          )}
+          {/* Botón Guardar */}
+          <div className="pt-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setViewMode(selectedReport ? 'view' : 'history')}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
+            >
+              Cancelar
+            </button>
 
-          {/* Botón generar */}
-          <button
-            onClick={handleGenerate}
-            disabled={loading || selectedIds.size === 0}
-            className="w-full py-3 rounded-2xl bg-white hover:bg-zinc-100 text-zinc-950 text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <><RefreshCw className="w-4 h-4 animate-spin" /> Generando...</>
-            ) : (
-              <><FileText className="w-4 h-4" /> Generar Reporte ({selectedIds.size} {selectedIds.size === 1 ? 'persona' : 'personas'})</>
-            )}
-          </button>
-        </>
+            <button
+              type="submit"
+              disabled={savingForm || selectedMemberIds.size === 0}
+              className="px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+            >
+              {savingForm ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  Guardar Reporte de Sesión
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       )}
 
-      {/* ── PASO 2: Ver reporte ── */}
-      {step === 'report' && report && (
-        <>
-          {/* Barra de acciones */}
-          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-zinc-300" />
-                <div>
-                  <h2 className="text-sm font-semibold text-white">{report.reportTitle}</h2>
-                  {report.isPartial && (
-                    <span className="text-[10px] text-amber-400">Reporte parcial · {report.members.length} integrantes</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { setStep('configure'); setReport(null); setError(null); }}
-                  className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-all"
-                >
-                  ← Editar
-                </button>
-                <button
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold transition-all disabled:opacity-50"
-                >
-                  {downloading
-                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    : <Download className="w-3.5 h-3.5" />}
-                  Descargar PDF
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Firmado por */}
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900/40 border border-zinc-800/60 rounded-xl">
-            <User className="w-3.5 h-3.5 text-zinc-400" />
-            <span className="text-xs text-zinc-400">
-              Generado por{' '}
-              <span className="text-zinc-200 font-semibold">{report.generatedBy}</span>
-              {' · '}
-              <span className="text-zinc-500">{fmtDate(report.generatedAt)}</span>
-            </span>
-          </div>
-
-          {/* Cards resumen */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-3.5 flex flex-col gap-1">
-              <Users className="w-4 h-4 text-emerald-400" />
-              <span className="text-xl font-bold text-white">{report.totalActiveMembers}</span>
-              <span className="text-[11px] text-zinc-400 leading-tight">Con disponibilidad</span>
-            </div>
-            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-3.5 flex flex-col gap-1">
-              <Clock className="w-4 h-4 text-zinc-300" />
-              <span className="text-xl font-bold text-white">{report.teamTotalHours}h</span>
-              <span className="text-[11px] text-zinc-400 leading-tight">Horas del grupo</span>
-            </div>
-            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-3.5 flex flex-col gap-1">
-              <TrendingUp className="w-4 h-4 text-zinc-300" />
-              <span className="text-xl font-bold text-white">{report.mostActiveDay}</span>
-              <span className="text-[11px] text-zinc-400 leading-tight">Día más activo</span>
-            </div>
-          </div>
-
-          {/* Actividades realizadas */}
-          {report.activities && (
-            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800/60 border-b border-zinc-700/60">
-                <span className="text-zinc-300 text-sm">✦</span>
-                <h3 className="text-xs font-semibold text-zinc-200">Actividades realizadas</h3>
-              </div>
-              <p className="px-4 py-3 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                {report.activities}
-              </p>
-            </div>
-          )}
-
-          {/* Notas del ingeniero */}
-          {report.engineerNotes && (
-            <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-800/60 border-b border-zinc-700/60">
-                <span className="text-zinc-300 text-sm">✎</span>
-                <h3 className="text-xs font-semibold text-zinc-200">Notas del ingeniero</h3>
-              </div>
-              <p className="px-4 py-3 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                {report.engineerNotes}
-              </p>
-            </div>
-          )}
-
-          {/* Cobertura por día */}
-          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-zinc-800/60 mb-3">
-              <Calendar className="w-4 h-4 text-zinc-400" />
-              <h3 className="text-sm font-semibold text-white">Personas disponibles por día</h3>
-            </div>
-            <div className="flex gap-1.5 items-end h-20">
-              {DAY_ORDER.map((day) => {
-                const count = report.coverageByDay[day] || 0;
-                const max = Math.max(...Object.values(report.coverageByDay), 1);
-                const pct = count / max;
-                return (
-                  <div key={day} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-[10px] font-semibold text-emerald-400">{count > 0 ? count : ''}</span>
-                    <div
-                      className="w-full rounded-t"
-                      style={{
-                        height: `${Math.max(pct * 52, count > 0 ? 4 : 0)}px`,
-                        backgroundColor: count > 0 ? '#34d399' : '#27272a',
-                        opacity: count > 0 ? 0.7 + pct * 0.3 : 1,
-                      }}
-                    />
-                    <span className="text-[10px] text-zinc-500">{day}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Tabla miembros */}
-          <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-2 p-4 border-b border-zinc-800/60">
-              <Users className="w-4 h-4 text-zinc-400" />
-              <h3 className="text-sm font-semibold text-white">Disponibilidad por integrante</h3>
-            </div>
-            <div className="divide-y divide-zinc-800/50">
-              {report.members.map((m) => {
-                const active = m.totalSlots > 0;
-                return (
-                  <div
-                    key={m.id}
-                    className={`px-4 py-3 flex items-center justify-between gap-3 ${active ? '' : 'opacity-40'}`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold">
-                        {m.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={m.avatar_url} alt={m.full_name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className={active ? 'text-emerald-400' : 'text-zinc-500'}>
-                            {m.full_name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold text-zinc-100 truncate">{m.full_name}</span>
-                          {m.role === 'admin' && (
-                            <span className="text-[9px] text-zinc-500 border border-zinc-700 px-1 rounded flex-shrink-0">Admin</span>
-                          )}
-                        </div>
-                        {active ? (
-                          <div className="text-[10px] text-zinc-500 mt-0.5">
-                            {m.days.join(' · ')} · {m.earliestStart}–{m.latestEnd}
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-zinc-600 italic mt-0.5">Sin disponibilidad esta semana</div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      {active ? (
-                        <>
-                          <div className="text-right">
-                            <div className="text-sm font-bold text-white">{m.totalHours}h</div>
-                            <div className="text-[10px] text-zinc-500">{m.totalSlots} bloques</div>
-                          </div>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        </>
-                      ) : (
-                        <div className="text-xs text-zinc-600">—</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Error descarga */}
-          {error && (
-            <div className="flex items-center gap-2 px-4 py-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-rose-300 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {error}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }

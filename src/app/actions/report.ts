@@ -17,15 +17,24 @@ export interface MemberReportRow {
 }
 
 export interface WeeklyReportData {
-  generatedBy: string;           // nombre del usuario que lo generó
+  generatedBy: string;
   generatedById: string;
-  generatedAt: string;           // ISO timestamp
-  weekStart: string;             // ISO del último sábado reset
+  generatedAt: string;
+  weekStart: string;
+  reportTitle: string;          // título personalizado del reporte
+  isPartial: boolean;           // true si solo incluye algunos miembros
   members: MemberReportRow[];
-  totalActiveMembers: number;    // miembros con al menos 1 slot
+  totalActiveMembers: number;
   teamTotalHours: number;
   mostActiveDay: string;
-  coverageByDay: Record<string, number>; // día → nº de personas disponibles ese día
+  coverageByDay: Record<string, number>;
+}
+
+export interface TeamMemberOption {
+  id: string;
+  full_name: string;
+  role: string;
+  avatar_url: string | null;
 }
 
 const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -35,13 +44,47 @@ function parseHHMM(t: string): number {
   return h * 60 + (m || 0);
 }
 
-export async function generateWeeklyReport(): Promise<WeeklyReportData> {
+/**
+ * Devuelve la lista completa de miembros activos del equipo (para el selector).
+ */
+export async function getTeamMemberOptions(): Promise<TeamMemberOption[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autorizado');
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, role, avatar_url')
+    .eq('is_active', true)
+    .order('full_name');
+
+  if (error) throw new Error(error.message);
+
+  return (data || []).map((p) => ({
+    id: p.id,
+    full_name: p.full_name,
+    role: p.role,
+    avatar_url: (p as { avatar_url?: string | null }).avatar_url ?? null,
+  }));
+}
+
+/**
+ * Genera el reporte de disponibilidad semanal.
+ *
+ * @param selectedMemberIds  Si se pasa, el reporte solo incluye esos miembros.
+ *                           Si es undefined o vacío, incluye a todos.
+ * @param reportTitle        Título opcional para el reporte (ej. "Proyecto X").
+ */
+export async function generateWeeklyReport(
+  selectedMemberIds?: string[],
+  reportTitle?: string,
+): Promise<WeeklyReportData> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autorizado');
 
   const supabase = createAdminClient();
 
-  // Quién generó el reporte
+  // Quién genera el reporte
   const { data: me } = await supabase
     .from('profiles')
     .select('full_name')
@@ -50,22 +93,37 @@ export async function generateWeeklyReport(): Promise<WeeklyReportData> {
 
   const lastResetUtc = await getLastSaturdayResetUtc();
 
+  // Construir query de perfiles (todos o solo los seleccionados)
+  const hasFilter = selectedMemberIds && selectedMemberIds.length > 0;
+
+  let profilesQuery = supabase
+    .from('profiles')
+    .select('id, full_name, role, avatar_url')
+    .eq('is_active', true);
+
+  if (hasFilter) {
+    profilesQuery = profilesQuery.in('id', selectedMemberIds);
+  }
+
   const [slotsRes, profilesRes] = await Promise.all([
     supabase
       .from('availability_slots')
       .select('*')
       .gte('created_at', lastResetUtc),
-    supabase
-      .from('profiles')
-      .select('id, full_name, role, avatar_url')
-      .eq('is_active', true),
+    profilesQuery,
   ]);
 
   if (slotsRes.error) throw new Error(slotsRes.error.message);
   if (profilesRes.error) throw new Error(profilesRes.error.message);
 
-  const slots = slotsRes.data || [];
+  const allSlots = slotsRes.data || [];
   const profiles = profilesRes.data || [];
+
+  // Solo slots de los miembros incluidos en el reporte
+  const profileIds = new Set(profiles.map((p) => p.id));
+  const slots = hasFilter
+    ? allSlots.filter((s) => profileIds.has(s.user_id))
+    : allSlots;
 
   // Agrupar slots por usuario
   const slotsByUser: Record<string, typeof slots> = {};
@@ -74,7 +132,7 @@ export async function generateWeeklyReport(): Promise<WeeklyReportData> {
     slotsByUser[s.user_id].push(s);
   }
 
-  // Contar cobertura por día (cuántos miembros distintos tienen al menos 1 slot ese día)
+  // Cobertura por día (solo miembros del reporte)
   const coverageByDayCount: Record<number, Set<string>> = {};
   for (const s of slots) {
     if (!coverageByDayCount[s.day_of_week]) coverageByDayCount[s.day_of_week] = new Set();
@@ -140,6 +198,8 @@ export async function generateWeeklyReport(): Promise<WeeklyReportData> {
     generatedById: userId,
     generatedAt: new Date().toISOString(),
     weekStart: lastResetUtc,
+    reportTitle: reportTitle?.trim() || 'Reporte Semanal',
+    isPartial: hasFilter ? true : false,
     members,
     totalActiveMembers: activeMembers.length,
     teamTotalHours: Math.round(teamTotalHours * 10) / 10,

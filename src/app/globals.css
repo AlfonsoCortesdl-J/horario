@@ -15,9 +15,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Evitar pull-to-refresh involuntario durante el arrastre táctil de bloques */
+/* Permitir desplazamiento suave y libre tanto horizontal como vertical en móvil */
 .touch-paint-area {
-  touch-action: none;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Scrollbars estilizadas y sutiles */

@@ -144,7 +144,7 @@ export default function DashboardClient({
 
         {/* Pestaña: Disponibilidad (When2Meet y Mapa de Calor) */}
         {activeTab === 'availability' && (
-          <div className="flex-1 flex flex-col bg-zinc-900/60 rounded-2xl border border-zinc-800/80 overflow-hidden">
+          <div className="flex-1 min-h-0 h-[calc(100vh-130px)] sm:h-auto flex flex-col bg-zinc-900/60 rounded-2xl border border-zinc-800/80 overflow-hidden">
             <AvailabilityGrid
               currentUserId={profile.id}
               userSlots={userSlots}

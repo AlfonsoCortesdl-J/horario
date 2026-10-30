@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import { Profile, AvailabilitySlot } from '@/types/database';
+import { getPresenceWindowsAndCoverage } from '@/app/actions/presence';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,11 +47,14 @@ export default async function HomePage() {
     profile = insertedProfile || newProfile;
   }
 
-  // Cargar slots propios y slots grupales
-  const [userSlotsRes, allSlotsRes, profilesRes] = await Promise.all([
+  // Cargar slots de disponibilidad, perfiles y ventanas de presencia de hoy
+  const todayIso = new Date().toISOString();
+
+  const [userSlotsRes, allSlotsRes, profilesRes, presenceData] = await Promise.all([
     supabase.from('availability_slots').select('*').eq('user_id', user.id),
     supabase.from('availability_slots').select('*'),
     supabase.from('profiles').select('*').eq('is_active', true),
+    getPresenceWindowsAndCoverage(todayIso),
   ]);
 
   const userSlots = (userSlotsRes.data || []) as AvailabilitySlot[];
@@ -63,6 +67,8 @@ export default async function HomePage() {
       initialUserSlots={userSlots}
       initialAllSlots={allSlots}
       initialProfiles={profiles}
+      initialWindows={presenceData.windows}
+      initialCoverageSlots={presenceData.coverageSlots}
     />
   );
 }

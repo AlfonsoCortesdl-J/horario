@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
     <html lang="es">
       <body className="antialiased bg-[#09090b] text-zinc-100 min-h-screen selection:bg-zinc-800 selection:text-white">
         {children}
+        <SpeedInsights />
         <script
           dangerouslySetInnerHTML={{
             __html: `

@@ -123,10 +123,10 @@ export default function DashboardClient({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen flex flex-col bg-[#09090b] text-zinc-100">
       <Navbar profile={profile} activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-2 sm:p-4 pb-20">
+      <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-2 sm:p-4 pb-24">
         {/* Pestaña: Presencia y Mapa de Cobertura (Módulo 2 Núcleo) */}
         {activeTab === 'presence' && (
           <PresenceCalendar
@@ -143,7 +143,7 @@ export default function DashboardClient({
 
         {/* Pestaña: Disponibilidad (When2Meet y Mapa de Calor) */}
         {activeTab === 'availability' && (
-          <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-zinc-900/60 rounded-2xl border border-zinc-800/80 overflow-hidden">
             <AvailabilityGrid
               currentUserId={profile.id}
               userSlots={userSlots}

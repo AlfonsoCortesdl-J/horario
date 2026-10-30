@@ -3,17 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #09090b;
+  --foreground: #f4f4f5;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Evitar pull-to-refresh involuntario durante el arrastre táctil de bloques */
@@ -21,18 +20,18 @@ body {
   touch-action: none;
 }
 
-/* Scrollbars estilizadas */
+/* Scrollbars estilizadas y sutiles */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(255, 255, 255, 0.25);
 }

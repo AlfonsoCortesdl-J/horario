@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getTeamProfiles, selectExistingMember, registerNewMember } from '@/app/actions/auth';
 import { Profile } from '@/types/database';
-import { Clock, User, UserPlus, Users, ArrowRight, ShieldCheck, Car } from 'lucide-react';
+import { User, ArrowRight, Car, Plus, Check, Shield } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'select' | 'new'>('select');
@@ -26,6 +27,7 @@ export default function LoginPage() {
   }, []);
 
   const handleSelectUser = async (userId: string) => {
+    setSelectedId(userId);
     setSubmitting(true);
     setError(null);
     try {
@@ -33,9 +35,10 @@ export default function LoginPage() {
       router.push('/');
       router.refresh();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al seleccionar usuario';
+      const msg = err instanceof Error ? err.message : 'No se pudo iniciar sesión';
       setError(msg);
       setSubmitting(false);
+      setSelectedId(null);
     }
   };
 
@@ -50,146 +53,186 @@ export default function LoginPage() {
       router.push('/');
       router.refresh();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al registrarte';
+      const msg = err instanceof Error ? err.message : 'No se pudo registrar el nombre';
       setError(msg);
       setSubmitting(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center px-4 py-8 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <div className="w-14 h-14 bg-sky-600 rounded-2xl flex items-center justify-center shadow-lg shadow-sky-600/30">
-            <Clock className="w-8 h-8 text-white" />
+    <main className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col justify-between px-4 py-8 sm:px-6 relative overflow-hidden">
+      {/* Luz ambiental sutil en la parte superior (no el azul neón estridente de plantilla IA) */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[220px] bg-gradient-to-b from-zinc-700/10 via-zinc-800/5 to-transparent blur-3xl pointer-events-none" />
+
+      {/* Contenido principal centrado */}
+      <div className="w-full max-w-md mx-auto my-auto relative z-10">
+        {/* Cabecera elegante y minimalista */}
+        <div className="text-center mb-7">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-medium text-zinc-400 mb-4 tracking-wide">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span>TecMM Zapopan · Coordinación</span>
           </div>
+
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+            {mode === 'select' ? '¿Quién eres?' : 'Nuevo integrante'}
+          </h1>
+          <p className="mt-2 text-xs sm:text-sm text-zinc-400 max-w-xs mx-auto leading-relaxed">
+            {mode === 'select'
+              ? 'Toca tu nombre para entrar al horario. Sin contraseñas ni correos.'
+              : 'Escribe tu nombre para agregarte a la lista del equipo.'}
+          </p>
         </div>
-        <h1 className="mt-4 text-center text-2xl font-bold tracking-tight text-white">
-          Coordinación de Presencia
-        </h1>
-        <p className="mt-1 text-center text-xs sm:text-sm text-slate-400">
-          Regla de 2 y Carpooling para el equipo
-        </p>
-      </div>
 
-      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-slate-800/90 backdrop-blur-md border border-slate-700/60 py-6 px-5 sm:px-8 shadow-xl rounded-2xl space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-700/60">
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-sky-400" />
-              Sistema de Confianza
-            </h2>
-            <span className="text-[10px] text-slate-400">Sin correos ni contraseñas</span>
-          </div>
-
+        {/* Tarjeta de interacción */}
+        <div className="bg-zinc-900/70 border border-zinc-800/80 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
           {error && (
-            <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/60 text-xs text-red-200">
+            <div className="p-3 rounded-xl bg-red-950/50 border border-red-800/50 text-xs text-red-200">
               {error}
             </div>
           )}
 
-          {/* Toggle entre elegir miembro o escribir nombre nuevo */}
-          {profiles.length > 0 && (
-            <div className="flex bg-slate-900/80 p-1 rounded-xl text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setMode('select')}
-                className={`flex-1 py-1.5 rounded-lg transition-all ${
-                  mode === 'select'
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Soy miembro existente
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('new')}
-                className={`flex-1 py-1.5 rounded-lg transition-all ${
-                  mode === 'new'
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Soy nuevo (+ registrarme)
-              </button>
-            </div>
-          )}
-
-          {/* LISTA DE MIEMBROS EXISTENTES */}
-          {mode === 'select' && profiles.length > 0 && (
+          {/* LISTA DE INTEGRANTES */}
+          {mode === 'select' && (
             <div className="space-y-2">
-              <label className="block text-xs font-medium text-slate-300">
-                Toca tu nombre para entrar:
-              </label>
-              <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
-                {profiles.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => handleSelectUser(p.id)}
-                    className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900/60 hover:bg-sky-950/40 border border-slate-700/60 hover:border-sky-500/60 text-left transition-all group"
-                  >
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-700 group-hover:bg-sky-600 text-white flex items-center justify-center font-bold text-xs transition-colors">
-                        {p.full_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs sm:text-sm font-semibold text-white">
-                          {p.full_name}
-                        </div>
-                        {p.has_car && (
-                          <div className="text-[10px] text-sky-400 flex items-center gap-1">
-                            <Car className="w-3 h-3" /> Conductor ({p.available_seats} asientos)
+              {loading ? (
+                <div className="py-10 text-center text-xs text-zinc-500">
+                  Cargando integrantes del equipo...
+                </div>
+              ) : profiles.length === 0 ? (
+                <div className="py-6 text-center text-xs text-zinc-400">
+                  Aún no hay integrantes registrados.
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto space-y-1.5 pr-0.5">
+                  {profiles.map((p) => {
+                    const isCurrentLoading = submitting && selectedId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => handleSelectUser(p.id)}
+                        className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all border ${
+                          isCurrentLoading
+                            ? 'bg-zinc-800 border-zinc-600'
+                            : 'bg-zinc-950/60 border-zinc-800/70 hover:bg-zinc-800/60 hover:border-zinc-700'
+                        } group`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700/80 text-zinc-200 flex items-center justify-center font-semibold text-xs transition-colors group-hover:border-zinc-500">
+                            {p.full_name.charAt(0).toUpperCase()}
                           </div>
-                        )}
-                      </div>
-                    </div>
+                          <div>
+                            <div className="text-sm font-medium text-zinc-100 flex items-center gap-1.5">
+                              {p.full_name}
+                              {p.role === 'admin' && (
+                                <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 px-1.5 py-0.2 rounded font-normal">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
+                            {p.has_car ? (
+                              <div className="text-[11px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                                <Car className="w-3 h-3 text-zinc-400" />
+                                <span>Conductor · {p.available_seats} lugares</span>
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-zinc-500 mt-0.5">
+                                Integrante
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
-                    <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-sky-400 transition-colors" />
-                  </button>
-                ))}
-              </div>
+                        {isCurrentLoading ? (
+                          <div className="w-4 h-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Botón para cambiar a registro de nuevo integrante */}
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setMode('new');
+                }}
+                className="w-full mt-3 py-2.5 px-3 rounded-xl border border-dashed border-zinc-700/80 hover:border-zinc-500 text-xs font-medium text-zinc-400 hover:text-zinc-200 flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>¿No estás en la lista? Regístrate aquí</span>
+              </button>
             </div>
           )}
 
-          {/* FORMULARIO PARA REGISTRAR NOMBRE NUEVO */}
-          {(mode === 'new' || profiles.length === 0) && (
+          {/* FORMULARIO PARA AGREGAR NUEVO INTEGRANTE */}
+          {mode === 'new' && (
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  ¿Cómo te llamas?
+                <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                  Nombre completo
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
                   <input
                     type="text"
                     required
-                    placeholder="Ej. Alfonso Cortés"
+                    autoFocus
+                    placeholder="Ej. Juan Pérez"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                    className="w-full pl-10 pr-4 py-2.5 bg-zinc-950 border border-zinc-700/80 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-400 text-sm transition-colors"
                   />
                 </div>
+                <p className="text-[11px] text-zinc-500 mt-1.5">
+                  Este es el nombre que verán tus compañeros en el horario y carpooling.
+                </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={submitting || !newName.trim()}
-                className="w-full flex items-center justify-center py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold shadow-md shadow-sky-600/30 transition-all disabled:opacity-50"
-              >
-                {submitting ? 'Entrando...' : 'Entrar al Equipo 🚀'}
-              </button>
+              <div className="flex gap-2 pt-1">
+                {profiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setMode('select');
+                    }}
+                    className="py-2.5 px-4 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-medium transition-colors"
+                  >
+                    Volver
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting || !newName.trim()}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold shadow transition-all disabled:opacity-40"
+                >
+                  {submitting ? 'Guardando...' : 'Unirme al equipo'}
+                </button>
+              </div>
             </form>
           )}
+        </div>
 
-          <div className="pt-2 flex items-center justify-center space-x-1.5 text-[11px] text-slate-400 text-center">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-            <span>Tu nombre se guardará en tu dispositivo para recordar tu sesión.</span>
-          </div>
+        {/* Pie informativo */}
+        <div className="mt-6 text-center">
+          <p className="text-[11px] text-zinc-500 flex items-center justify-center gap-1.5">
+            <Shield className="w-3 h-3 text-zinc-400" />
+            <span>Sistema interno · Regla de 2 obligatoria en el lugar</span>
+          </p>
         </div>
       </div>
+
+      {/* Footer discreto */}
+      <footer className="text-center text-[10px] text-zinc-600 relative z-10">
+        Coordinación Asíncrona · {new Date().getFullYear()}
+      </footer>
     </main>
   );
 }

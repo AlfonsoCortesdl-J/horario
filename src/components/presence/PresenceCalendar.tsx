@@ -138,13 +138,13 @@ export default function PresenceCalendar({
   return (
     <div className="space-y-5 pb-20">
       {/* Barra de Controles y Selector de Fecha */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+      <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-3.5 shadow-sm space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center space-x-2">
             <button
               type="button"
               onClick={() => changeDate(-1)}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -152,19 +152,19 @@ export default function PresenceCalendar({
               type="date"
               value={selectedDateStr}
               onChange={(e) => setSelectedDateStr(e.target.value)}
-              className="px-3 py-1.5 text-xs sm:text-sm font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
+              className="px-3 py-1.5 text-xs sm:text-sm font-medium bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 outline-none focus:border-zinc-500"
             />
             <button
               type="button"
               onClick={() => changeDate(1)}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => setSelectedDateStr(new Date().toISOString().split('T')[0])}
-              className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-200"
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors"
             >
               Hoy
             </button>
@@ -173,24 +173,24 @@ export default function PresenceCalendar({
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center justify-center space-x-1.5 px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-md shadow-sky-600/30 transition-all"
+            className="flex items-center justify-center space-x-1.5 px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 text-xs font-semibold shadow transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span>Declarar Presencia</span>
+            <span>Registrar Presencia</span>
           </button>
         </div>
       </div>
 
       {/* MAPA DE COBERTURA EN TIEMPO REAL (MÓDULO 2 CORE) */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-zinc-800/80">
           <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-sky-500" />
-              Mapa de Cobertura en Vivo (Regla de 2)
+            <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              Estado de Cobertura (Regla de 2)
             </h2>
-            <p className="text-xs text-slate-500">
-              Gris = 0 personas · Rojo = 1 persona (Violación) · Verde = 2 o más (Protegido)
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Gris = Sin presencia · Rojo = 1 persona sola (alerta) · Verde = 2 o más personas (acompañadas)
             </p>
           </div>
 

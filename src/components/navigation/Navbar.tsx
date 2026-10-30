@@ -1,16 +1,12 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { Profile } from '@/types/database';
 import { 
   CalendarClock, 
   Users, 
   Car, 
   User, 
-  ShieldCheck, 
-  LogOut,
-  Clock
+  LogOut
 } from 'lucide-react';
 import { logoutMember } from '@/app/actions/auth';
 import { useRouter } from 'next/navigation';
@@ -33,97 +29,110 @@ export default function Navbar({ profile, activeTab, setActiveTab }: NavbarProps
   return (
     <>
       {/* Barra Superior */}
-      <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-30 px-4 py-3 flex items-center justify-between">
+      <header className="bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/80 text-zinc-100 sticky top-0 z-30 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-sky-600 flex items-center justify-center shadow-md shadow-sky-600/30">
-            <Clock className="w-5 h-5 text-white" />
+          {/* Logo Minimalista de la Regla de 2 (Dos anillos enlazados) */}
+          <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-700/80 flex items-center justify-center text-zinc-200">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="12" r="5" />
+              <circle cx="15" cy="12" r="5" />
+            </svg>
           </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight leading-none text-white flex items-center gap-1.5">
-              Presencia
+            <div className="text-xs font-semibold tracking-tight text-white flex items-center gap-1.5">
+              <span>Coordinación</span>
+              <span className="text-[10px] text-zinc-400 font-normal">Zapopan</span>
               {profile?.role === 'admin' && (
-                <span className="text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
+                <span className="text-[9px] uppercase tracking-wider font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700 px-1.5 py-0.2 rounded">
                   Admin
                 </span>
               )}
-            </h1>
-            <p className="text-[11px] text-slate-400 leading-none mt-0.5">
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-tight">
               {profile ? profile.full_name : 'Cargando...'}
             </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Indicador de regla de 2 */}
-          <div className="hidden sm:flex items-center space-x-1.5 text-xs bg-slate-800 text-slate-300 px-3 py-1.5 rounded-full border border-slate-700">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Mínimo 2 presentes</span>
+          {/* Badge sutil de Regla de 2 */}
+          <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium bg-zinc-900 border border-zinc-800 text-zinc-300 px-2.5 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span>Regla de 2 activa</span>
           </div>
 
           <button
             type="button"
             onClick={handleLogout}
-            title="Cerrar sesión"
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            title="Cambiar de usuario"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      {/* Barra de Navegación Inferior Móvil (Mobile-first bottom navigation) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 py-1 px-2 flex justify-around items-center">
+      {/* Barra de Navegación Inferior Móvil (Dock moderno) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-lg border-t border-zinc-800/80 py-1.5 px-3 flex justify-around items-center">
         <button
           type="button"
-          onClick={() => setActiveTab('availability')}
-          className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all ${
-            activeTab === 'availability'
-              ? 'text-sky-600 dark:text-sky-400 font-semibold'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          onClick={() => setActiveTab('presence')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+            activeTab === 'presence'
+              ? 'text-white font-medium'
+              : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
-          <CalendarClock className={`w-5 h-5 ${activeTab === 'availability' ? 'scale-110' : ''}`} />
-          <span className="text-[11px] mt-1">Disponibilidad</span>
+          <div className={`p-1 rounded-lg ${activeTab === 'presence' ? 'bg-zinc-800 text-white' : ''}`}>
+            <Users className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] mt-0.5">Presencia</span>
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveTab('presence')}
-          className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all ${
-            activeTab === 'presence'
-              ? 'text-sky-600 dark:text-sky-400 font-semibold'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+          onClick={() => setActiveTab('availability')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+            activeTab === 'availability'
+              ? 'text-white font-medium'
+              : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
-          <Users className={`w-5 h-5 ${activeTab === 'presence' ? 'scale-110' : ''}`} />
-          <span className="text-[11px] mt-1">Presencia</span>
+          <div className={`p-1 rounded-lg ${activeTab === 'availability' ? 'bg-zinc-800 text-white' : ''}`}>
+            <CalendarClock className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] mt-0.5">Horarios</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('rides')}
-          className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
             activeTab === 'rides'
-              ? 'text-sky-600 dark:text-sky-400 font-semibold'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              ? 'text-white font-medium'
+              : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
-          <Car className={`w-5 h-5 ${activeTab === 'rides' ? 'scale-110' : ''}`} />
-          <span className="text-[11px] mt-1">Transporte</span>
+          <div className={`p-1 rounded-lg ${activeTab === 'rides' ? 'bg-zinc-800 text-white' : ''}`}>
+            <Car className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] mt-0.5">Transporte</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('profile')}
-          className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all ${
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
             activeTab === 'profile'
-              ? 'text-sky-600 dark:text-sky-400 font-semibold'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              ? 'text-white font-medium'
+              : 'text-zinc-500 hover:text-zinc-300'
           }`}
         >
-          <User className={`w-5 h-5 ${activeTab === 'profile' ? 'scale-110' : ''}`} />
-          <span className="text-[11px] mt-1">
-            {profile?.role === 'admin' ? 'Admin / Perfil' : 'Mi Perfil'}
+          <div className={`p-1 rounded-lg ${activeTab === 'profile' ? 'bg-zinc-800 text-white' : ''}`}>
+            <User className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] mt-0.5">
+            {profile?.role === 'admin' ? 'Admin' : 'Perfil'}
           </span>
         </button>
       </nav>

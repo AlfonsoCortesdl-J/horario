@@ -7,6 +7,7 @@ import AvailabilityGrid from '@/components/availability/AvailabilityGrid';
 import PresenceCalendar from '@/components/presence/PresenceCalendar';
 import RidesHub from '@/components/rides/RidesHub';
 import ProfileSettings from '@/components/profile/ProfileSettings';
+import ReportPanel from '@/components/report/ReportPanel';
 import { saveUserAvailabilitySlots } from '@/app/actions/availability';
 import { updateUserProfile, inviteTeamMember } from '@/app/actions/profile';
 import { 
@@ -42,7 +43,7 @@ export default function DashboardClient({
   initialCoverageSlots,
   initialRidesData,
 }: DashboardClientProps) {
-  const [activeTab, setActiveTab] = useState<'availability' | 'presence' | 'rides' | 'profile'>('availability');
+  const [activeTab, setActiveTab] = useState<'availability' | 'presence' | 'rides' | 'profile' | 'report'>('availability');
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [userSlots, setUserSlots] = useState<AvailabilitySlot[]>(initialUserSlots);
   const [allSlots, setAllSlots] = useState<AvailabilitySlot[]>(initialAllSlots);
@@ -172,6 +173,11 @@ export default function DashboardClient({
             onUpdateProfile={handleUpdateProfile}
             onInviteUser={handleInviteUser}
           />
+        )}
+
+        {/* Pestaña: Reporte Semanal con descarga PDF */}
+        {activeTab === 'report' && (
+          <ReportPanel />
         )}
       </main>
     </div>

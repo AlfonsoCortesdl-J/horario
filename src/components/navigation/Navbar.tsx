@@ -6,15 +6,16 @@ import {
   Users, 
   Car, 
   User, 
-  LogOut
+  LogOut,
+  FileText
 } from 'lucide-react';
 import { logoutMember } from '@/app/actions/auth';
 import { useRouter } from 'next/navigation';
 
 interface NavbarProps {
   profile: Profile | null;
-  activeTab: 'availability' | 'presence' | 'rides' | 'profile';
-  setActiveTab: (tab: 'availability' | 'presence' | 'rides' | 'profile') => void;
+  activeTab: 'availability' | 'presence' | 'rides' | 'profile' | 'report';
+  setActiveTab: (tab: 'availability' | 'presence' | 'rides' | 'profile' | 'report') => void;
 }
 
 export default function Navbar({ profile, activeTab, setActiveTab }: NavbarProps) {
@@ -117,6 +118,21 @@ export default function Navbar({ profile, activeTab, setActiveTab }: NavbarProps
             <Car className="w-4 h-4" />
           </div>
           <span className="text-[10px] mt-0.5">Transporte</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('report')}
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+            activeTab === 'report'
+              ? 'text-white font-medium'
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <div className={`p-1 rounded-lg ${activeTab === 'report' ? 'bg-zinc-800 text-white' : ''}`}>
+            <FileText className="w-4 h-4" />
+          </div>
+          <span className="text-[10px] mt-0.5">Reporte</span>
         </button>
 
         <button

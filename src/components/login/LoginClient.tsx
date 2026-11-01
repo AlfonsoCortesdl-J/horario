@@ -24,13 +24,19 @@ export default function LoginClient() {
   const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
-    getTeamProfiles().then((list) => {
-      setProfiles(list);
-      setLoading(false);
-      if (list.length === 0) {
+    getTeamProfiles()
+      .then((list) => {
+        setProfiles(list);
+        setLoading(false);
+        if (list.length === 0) {
+          setMode('new');
+        }
+      })
+      .catch((err) => {
+        console.error('Error al obtener integrantes:', err);
+        setLoading(false);
         setMode('new');
-      }
-    });
+      });
   }, []);
 
   const handleSelectUserClick = (p: Profile & { has_password: boolean }) => {

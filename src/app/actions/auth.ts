@@ -12,27 +12,32 @@ function getPlainPassword(record: Record<string, unknown>): string {
 }
 
 export async function getTeamProfiles(): Promise<(Profile & { has_password: boolean })[]> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('full_name', { ascending: true });
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('full_name', { ascending: true });
 
-  if (error) {
-    console.error('Error al cargar perfiles del equipo:', error);
+    if (error) {
+      console.error('Error al cargar perfiles del equipo:', error);
+      return [];
+    }
+
+    return (data || []).map((p) => {
+      const hasPass = Boolean(getPlainPassword(p));
+      // No exponemos la contraseña en la lista pública de selección, solo si tiene una
+      return {
+        ...p,
+        password: null,
+        phone: null,
+        has_password: hasPass,
+      };
+    });
+  } catch (err) {
+    console.error('Excepción al cargar perfiles del equipo:', err);
     return [];
   }
-
-  return (data || []).map((p) => {
-    const hasPass = Boolean(getPlainPassword(p));
-    // No exponemos la contraseña en la lista pública de selección, solo si tiene una
-    return {
-      ...p,
-      password: null,
-      phone: null,
-      has_password: hasPass,
-    };
-  });
 }
 
 /**

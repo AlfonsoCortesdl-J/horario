@@ -28,8 +28,8 @@ export const config = {
   matcher: [
     /*
      * Aplica a todas las rutas excepto:
-     * - _next/static, _next/image, favicon.ico, api/cron, manifest.json, y archivos multimedia
+     * - _next/static, _next/image, favicon.ico, api/cron, manifest.json, sw.js, robots.txt, y archivos multimedia
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/cron|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/cron|manifest.json|sw.js|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|json|js)$).*)',
   ],
 };
